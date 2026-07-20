@@ -1,0 +1,40 @@
+{
+  "message": [
+    {
+      "instrument_token": "3045",
+      "exchange_segment": "nse_cm",
+      "trading_symbol": "SBIN-EQ",
+      "last_traded_price": "870.00",
+      "ohlc": {
+        "open": "865.00",
+        "high": "875.00",
+        "low": "860.00",
+        "close": "868.50"
+      }
+    },
+    {
+      "instrument_token": "2181",
+      "exchange_segment": "nse_cm",
+      "trading_symbol": "BOSCHLTD-EQ",
+      "last_traded_price": "45200.00",
+      "ohlc": {
+        "open": "45000.00",
+        "high": "45500.00",
+        "low": "44800.00",
+        "close": "45100.00"
+      }
+    },
+    {
+      "instrument_token": "10604",
+      "exchange_segment": "nse_cm",
+      "trading_symbol": "ASHOKLEY-EQ",
+      "last_traded_price": "185.00",
+      "ohlc": {
+        "open": "184.00",
+        "high": "186.00",
+        "low": "183.00",
+        "close": "184.25"
+      }
+    }
+  ]
+}

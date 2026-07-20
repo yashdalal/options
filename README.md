@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Near Expiry Monitor
 
-## Getting Started
+Local-first Next.js dashboard that monitors open NSE option positions from a Kotak Neo account and highlights contracts trading near their strikes.
 
-First, run the development server:
+## What it does
+
+- Assisted Kotak login: TOTP in the browser; API token, mobile, UCC, and MPIN stay in `.env.local`
+- Reads positions from Kotak Neo (read-only usage; no order placement)
+- Resolves underlyings via daily scrip master files
+- Uses latest completed NSE close (`ohlc.close`) as Spot
+- Groups by expiry, pairs calls/puts without collapsing duplicates
+- Editable highlight threshold stored in browser local storage
+- Manual refresh plus optional 60-second auto refresh
+
+## Prerequisites
+
+- Node.js 20+
+- A Kotak Neo Trade API access token
+- Registered TOTP authenticator
+- UCC / client code
+- 6-digit MPIN
+
+## Setup
 
 ```bash
+cp .env.example .env.local
+# edit .env.local with your Kotak credentials
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and enter the current TOTP.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Local development server |
+| `npm run build && npm start` | Production-local run |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript |
+| `npm test` | Unit tests |
+| `npm run test:e2e` | Playwright smoke test |
+| `npm run probe:kotak` | Live Kotak contract probe |
 
-## Learn More
+### Live probe
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run probe:kotak
+# or
+npm run probe:kotak -- --totp=123456
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The probe authenticates, fetches positions/scrip master/quotes, writes a sanitized summary under `.cache/probe/`, and logs out.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+See [docs/kotak-contract.md](docs/kotak-contract.md) for endpoint notes and open questions.
 
-## Deploy on Vercel
+## Security notes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Never commit `.env.local`
+- The browser never receives Kotak tokens, MPIN, SID, or base URL
+- Kotak sessions returned after MPIN validation are trading-capable; this app intentionally exposes no trading endpoints
+- Bind locally by default; if you later host this, put it behind TLS and your own login
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project layout
+
+- `src/domain` — pure normalization, pairing, proximity math
+- `src/server/kotak` — broker adapters
+- `src/server/session.ts` — in-memory single-account session
+- `src/server/monitor.ts` — snapshot orchestration with request dedupe
+- `src/app/api` — same-origin auth/monitor routes
+- `tests/fixtures/kotak` — sanitized fixtures
+
+## Future hosting
+
+Prefer a persistent Node process / small VPS over serverless so the in-memory session and scrip-master cache remain simple. Keep REST polling as the correctness baseline before adding WebSockets.

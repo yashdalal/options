@@ -1,0 +1,5 @@
+pSymbol,pTrdSymbol,pSymBl,pInstrumentType,pOptionType,dStrikePrice,dExpiryDate,lLotSize,lMultiplier
+3045,SBIN-EQ,SBIN,EQ,,0,,1,1
+2181,BOSCHLTD-EQ,BOSCHLTD,EQ,,0,,1,1
+10604,ASHOKLEY-EQ,ASHOKLEY,EQ,,0,,1,1
+11915,M&M-EQ,M&M,EQ,,0,,1,1
