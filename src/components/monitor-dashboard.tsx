@@ -236,9 +236,9 @@ export function MonitorDashboard({
         ))}
       </div>
 
-      <div className="overflow-auto rounded-2xl border border-zinc-200 bg-white shadow-sm">
+      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
         <table className="min-w-full border-collapse text-sm">
-          <thead className="sticky top-0 bg-zinc-50">
+          <thead className="sticky top-0 z-10 bg-zinc-50 shadow-[inset_0_-1px_0_#d4d4d8]">
             <tr className="text-left text-zinc-700">
               {[
                 "Company",
