@@ -1,6 +1,7 @@
 const SECRET_PATTERNS = [
   /eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g,
   /\+91\d{10}/g,
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
 ];
 
 const SENSITIVE_KEYS = new Set([
@@ -58,12 +59,20 @@ export function safeErrorMessage(error: unknown): string {
   return "Unexpected error";
 }
 
+export function logError(message: string, details?: unknown): void {
+  if (details === undefined) {
+    console.error(message);
+    return;
+  }
+  console.error(message, JSON.stringify(redactValue(details), null, 2));
+}
+
 export function logInfo(message: string, details?: unknown): void {
   if (details === undefined) {
     console.info(message);
     return;
   }
-  console.info(message, redactValue(details));
+  console.info(message, JSON.stringify(redactValue(details), null, 2));
 }
 
 export function logWarn(message: string, details?: unknown): void {
@@ -71,13 +80,5 @@ export function logWarn(message: string, details?: unknown): void {
     console.warn(message);
     return;
   }
-  console.warn(message, redactValue(details));
-}
-
-export function logError(message: string, details?: unknown): void {
-  if (details === undefined) {
-    console.error(message);
-    return;
-  }
-  console.error(message, redactValue(details));
+  console.warn(message, JSON.stringify(redactValue(details), null, 2));
 }

@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { kotakFetch } from "./client";
+import { detectBrokerFailure } from "./broker-response";
 import { KotakApiError } from "./errors";
 import type { TradeSessionCredentials } from "./auth";
+import { logError } from "../logging";
 
 const positionRowSchema = z
   .object({
@@ -50,6 +52,17 @@ export async function fetchPositions(
       "neo-fin-key": session.neoFinKey,
     },
   });
+
+  const failure = detectBrokerFailure(payload);
+  if (failure) {
+    logError("Kotak positions rejected", payload);
+    throw new KotakApiError(
+      failure.message || "Positions request failed",
+      502,
+      "bad_request",
+      payload,
+    );
+  }
 
   const parsed = positionsResponseSchema.safeParse(payload);
   if (!parsed.success) {

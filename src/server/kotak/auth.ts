@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { getEnv } from "@/config/env";
 import { assertApprovedBaseUrl, kotakFetch } from "./client";
+import { detectBrokerFailure } from "./broker-response";
 import { KotakApiError } from "./errors";
+import { logError } from "../logging";
 
 const loginResponseSchema = z.object({
   data: z.object({
@@ -17,10 +19,21 @@ const validateResponseSchema = z.object({
     token: z.string().min(1),
     sid: z.string().min(1),
     baseUrl: z.string().url(),
+    hsServerId: z.union([z.string(), z.number()]).optional(),
     kType: z.string().optional(),
     status: z.string().optional(),
   }),
 });
+
+function assertAuthSuccess(payload: unknown, step: string): void {
+  const failure = detectBrokerFailure(payload);
+  if (!failure) {
+    return;
+  }
+
+  logError(`Kotak ${step} rejected`, payload);
+  throw new KotakApiError(failure.message || `${step} failed`, 401, "auth_failed", payload);
+}
 
 export type TradeSessionCredentials = {
   accessToken: string;
@@ -30,12 +43,12 @@ export type TradeSessionCredentials = {
   neoFinKey: string;
 };
 
-export type ViewSession = {
+type ViewSession = {
   viewToken: string;
   viewSid: string;
 };
 
-export async function totpLogin(totp: string): Promise<ViewSession> {
+async function totpLogin(totp: string): Promise<ViewSession> {
   const env = getEnv();
   const url = `${env.KOTAK_LOGIN_BASE_URL}/login/1.0/tradeApiLogin`;
   const payload = await kotakFetch(url, {
@@ -51,9 +64,11 @@ export async function totpLogin(totp: string): Promise<ViewSession> {
     },
   });
 
+  assertAuthSuccess(payload, "TOTP login");
   const parsed = loginResponseSchema.safeParse(payload);
   if (!parsed.success) {
-    throw new KotakApiError("Unexpected login response", 500, "invalid_response");
+    logError("Unexpected Kotak TOTP login response shape", payload);
+    throw new KotakApiError("Unexpected login response", 500, "invalid_response", payload);
   }
 
   return {
@@ -62,7 +77,7 @@ export async function totpLogin(totp: string): Promise<ViewSession> {
   };
 }
 
-export async function validateMpin(view: ViewSession): Promise<TradeSessionCredentials> {
+async function validateMpin(view: ViewSession): Promise<TradeSessionCredentials> {
   const env = getEnv();
   const url = `${env.KOTAK_LOGIN_BASE_URL}/login/1.0/tradeApiValidate`;
   const payload = await kotakFetch(url, {
@@ -78,12 +93,17 @@ export async function validateMpin(view: ViewSession): Promise<TradeSessionCrede
     },
   });
 
+  assertAuthSuccess(payload, "MPIN validate");
   const parsed = validateResponseSchema.safeParse(payload);
   if (!parsed.success) {
-    throw new KotakApiError("Unexpected validate response", 500, "invalid_response");
+    logError("Unexpected Kotak MPIN validate response shape", payload);
+    throw new KotakApiError("Unexpected validate response", 500, "invalid_response", payload);
   }
 
-  const baseUrl = assertApprovedBaseUrl(parsed.data.data.baseUrl);
+  const hasSessionRoute = String(parsed.data.data.hsServerId ?? "").trim().length > 0;
+  const baseUrl = assertApprovedBaseUrl(
+    hasSessionRoute ? parsed.data.data.baseUrl : env.KOTAK_LOGIN_BASE_URL,
+  );
 
   return {
     accessToken: env.KOTAK_ACCESS_TOKEN,

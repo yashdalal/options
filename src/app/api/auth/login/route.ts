@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionCookieName, hasKotakCredentials } from "@/config/env";
-import { isKotakApiError } from "@/server/kotak/errors";
+import { mapLoginError } from "@/server/login-errors";
 import { establishSession } from "@/server/session";
 
 const bodySchema = z.object({
@@ -36,10 +36,7 @@ export async function POST(request: Request): Promise<Response> {
 
     return NextResponse.json({ status: "authenticated" });
   } catch (error) {
-    const status = isKotakApiError(error) && error.status < 500 ? 401 : 500;
-    return NextResponse.json(
-      { error: status === 401 ? "Authentication failed" : "Unable to authenticate" },
-      { status },
-    );
+    const { status, error: message } = mapLoginError(error);
+    return NextResponse.json({ error: message }, { status });
   }
 }

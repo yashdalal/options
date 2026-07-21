@@ -31,11 +31,6 @@ export function getSessionState(): SessionState {
   return getStore().current;
 }
 
-export function getActiveCredentials(): TradeSessionCredentials | null {
-  const state = getStore().current;
-  return state.status === "trade_session" ? state.credentials : null;
-}
-
 export function getActiveSessionId(): string | null {
   const state = getStore().current;
   return state.status === "trade_session" ? state.id : null;
@@ -82,8 +77,4 @@ export function handleBrokerAuthFailure(error: unknown): never {
     throw Object.assign(new Error("Login required"), { status: 401, code: "login_required" });
   }
   throw error;
-}
-
-export function resetSessionStoreForTests(): void {
-  getStore().current = { status: "logged_out" };
 }

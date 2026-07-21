@@ -1,5 +1,50 @@
 import { KotakApiError } from "./errors";
-import { logWarn } from "../logging";
+import { logError, logWarn } from "../logging";
+
+function extractBrokerMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return typeof payload === "string" && payload.trim() ? payload.trim() : null;
+  }
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const nested = extractBrokerMessage(item);
+      if (nested) {
+        return nested;
+      }
+    }
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  for (const key of [
+    "message",
+    "Message",
+    "Error Message",
+    "errMsg",
+    "error",
+    "emsg",
+    "msg",
+    "description",
+  ]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (Array.isArray(value) || (value && typeof value === "object")) {
+      const nested = extractBrokerMessage(value);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  if (record.data && typeof record.data === "object") {
+    return extractBrokerMessage(record.data);
+  }
+
+  return null;
+}
 
 const APPROVED_HOST_SUFFIXES = [
   "kotaksecurities.com",
@@ -26,14 +71,22 @@ export function assertApprovedBaseUrl(baseUrl: string): string {
     throw new KotakApiError("Broker base URL host is not approved", 500, "invalid_response");
   }
 
-  return parsed.origin;
+  if (parsed.search || parsed.hash) {
+    throw new KotakApiError(
+      "Broker base URL must not contain a query or fragment",
+      500,
+      "invalid_response",
+    );
+  }
+
+  const pathname = parsed.pathname.replace(/\/+$/, "");
+  return `${parsed.origin}${pathname}`;
 }
 
 export type RequestOptions = {
   method?: "GET" | "POST";
   headers?: Record<string, string>;
   body?: unknown;
-  formUrlEncoded?: boolean;
   timeoutMs?: number;
   retries?: number;
 };
@@ -76,20 +129,8 @@ export async function kotakFetch(
 
       let body: string | undefined;
       if (options.body !== undefined) {
-        if (options.formUrlEncoded) {
-          headers["Content-Type"] = "application/x-www-form-urlencoded";
-          body =
-            typeof options.body === "string"
-              ? options.body
-              : new URLSearchParams(
-                  Object.entries(options.body as Record<string, string>).map(
-                    ([key, value]) => [key, String(value)],
-                  ),
-                ).toString();
-        } else {
-          headers["Content-Type"] = "application/json";
-          body = JSON.stringify(options.body);
-        }
+        headers["Content-Type"] = "application/json";
+        body = JSON.stringify(options.body);
       }
 
       const response = await fetch(url, {
@@ -125,10 +166,17 @@ export async function kotakFetch(
           continue;
         }
 
+        const brokerMessage = extractBrokerMessage(payload);
+        logError("Kotak request failed", {
+          url,
+          status: response.status,
+          payload,
+        });
         throw new KotakApiError(
-          `Kotak request failed with status ${response.status}`,
+          brokerMessage ?? `Kotak request failed with status ${response.status}`,
           response.status,
           code,
+          payload,
         );
       }
 

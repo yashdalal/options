@@ -1,7 +1,15 @@
 import { z } from "zod";
 
+function resolveConsumerKey(): string {
+  const raw =
+    process.env.KOTAK_ACCESS_TOKEN?.trim() ||
+    process.env.KOTAK_CONSUMER_KEY?.trim() ||
+    "";
+  return raw.replace(/^Bearer\s+/i, "").trim();
+}
+
 const envSchema = z.object({
-  KOTAK_ACCESS_TOKEN: z.string().min(1, "KOTAK_ACCESS_TOKEN is required"),
+  KOTAK_ACCESS_TOKEN: z.string().min(1, "KOTAK_ACCESS_TOKEN / KOTAK_CONSUMER_KEY is required"),
   KOTAK_MOBILE_NUMBER: z
     .string()
     .regex(/^\+91\d{10}$/, "KOTAK_MOBILE_NUMBER must look like +91XXXXXXXXXX"),
@@ -25,7 +33,10 @@ export function getEnv(): AppEnv {
     return cached;
   }
 
-  const parsed = envSchema.safeParse(process.env);
+  const parsed = envSchema.safeParse({
+    ...process.env,
+    KOTAK_ACCESS_TOKEN: resolveConsumerKey(),
+  });
   if (!parsed.success) {
     const details = parsed.error.issues
       .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
@@ -46,19 +57,19 @@ export function getHighlightDefault(): number {
   return Number.isFinite(value) && value > 0 ? value : 10;
 }
 
+export function isDemoMode(): boolean {
+  return process.env.DEMO_MODE?.trim().toLowerCase() === "true";
+}
+
 export function getSessionCookieName(): string {
   return process.env.SESSION_COOKIE_NAME?.trim() || "near_expiry_session";
 }
 
 export function hasKotakCredentials(): boolean {
   return Boolean(
-    process.env.KOTAK_ACCESS_TOKEN &&
+    resolveConsumerKey() &&
       process.env.KOTAK_MOBILE_NUMBER &&
       process.env.KOTAK_UCC &&
       process.env.KOTAK_MPIN,
   );
-}
-
-export function resetEnvCacheForTests(): void {
-  cached = null;
 }
