@@ -1,16 +1,19 @@
+import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSessionCookieName } from "@/config/env";
 import { isKotakApiError } from "@/server/kotak/errors";
+import { logError, safeErrorMessage } from "@/server/logging";
 import { getMonitorSnapshot } from "@/server/monitor";
 import { requireSession } from "@/server/session";
 
 export async function GET(): Promise<Response> {
+  const requestId = randomUUID();
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(getSessionCookieName())?.value;
     const credentials = requireSession(sessionId);
-    const snapshot = await getMonitorSnapshot(credentials);
+    const snapshot = await getMonitorSnapshot(credentials, requestId);
     return NextResponse.json(snapshot);
   } catch (error) {
     const status =
@@ -32,9 +35,22 @@ export async function GET(): Promise<Response> {
         : "upstream";
 
     if (status === 401 || code === "login_required" || code === "session_expired") {
-      return NextResponse.json({ error: "Login required", code: "login_required" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Login required", code: "login_required", requestId },
+        { status: 401 },
+      );
     }
 
-    return NextResponse.json({ error: "Unable to load monitor snapshot" }, { status: 500 });
+    logError("Monitor snapshot failed", {
+      requestId,
+      message: safeErrorMessage(error),
+      name: error instanceof Error ? error.name : "UnknownError",
+      code,
+      status,
+    });
+    return NextResponse.json(
+      { error: "Unable to load monitor snapshot", requestId },
+      { status: 500 },
+    );
   }
 }

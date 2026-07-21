@@ -24,9 +24,15 @@ function reportDateIst(): string {
     .replace(/ /g, "-");
 }
 
-async function buildSnapshot(session: TradeSessionCredentials): Promise<MonitorSnapshot> {
-  logInfo("Reading positions...");
-  const rawPositions = await fetchPositions(session);
+async function buildSnapshot(
+  session: TradeSessionCredentials,
+  requestId: string,
+): Promise<MonitorSnapshot> {
+  logInfo("Reading positions...", {
+    requestId,
+    runtimeRegion: process.env.VERCEL_REGION ?? "local",
+  });
+  const rawPositions = await fetchPositions(session, requestId);
   const registry = await loadScripMasterRegistry(session);
   const positions = normalizePositions(rawPositions, registry);
   logInfo(`Found ${positions.length} option positions`);
@@ -102,6 +108,7 @@ async function buildSnapshot(session: TradeSessionCredentials): Promise<MonitorS
 
 export async function getMonitorSnapshot(
   session: TradeSessionCredentials,
+  requestId: string,
 ): Promise<MonitorSnapshot> {
   if (inFlight) {
     return inFlight;
@@ -109,7 +116,7 @@ export async function getMonitorSnapshot(
 
   inFlight = (async () => {
     try {
-      return await buildSnapshot(session);
+      return await buildSnapshot(session, requestId);
     } catch (error) {
       handleBrokerAuthFailure(error);
       throw error;
