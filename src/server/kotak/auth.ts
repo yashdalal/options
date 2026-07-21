@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AccountCredentials } from "@/config/env";
 import { getEnv } from "@/config/env";
 import { assertApprovedBaseUrl, kotakFetch } from "./client";
 import { detectBrokerFailure } from "./broker-response";
@@ -48,18 +49,21 @@ type ViewSession = {
   viewSid: string;
 };
 
-async function totpLogin(totp: string): Promise<ViewSession> {
+async function totpLogin(
+  account: AccountCredentials,
+  totp: string,
+): Promise<ViewSession> {
   const env = getEnv();
   const url = `${env.KOTAK_LOGIN_BASE_URL}/login/1.0/tradeApiLogin`;
   const payload = await kotakFetch(url, {
     method: "POST",
     headers: {
-      Authorization: env.KOTAK_ACCESS_TOKEN,
+      Authorization: account.accessToken,
       "neo-fin-key": env.KOTAK_NEO_FIN_KEY,
     },
     body: {
-      mobileNumber: env.KOTAK_MOBILE_NUMBER,
-      ucc: env.KOTAK_UCC,
+      mobileNumber: account.mobileNumber,
+      ucc: account.ucc,
       totp,
     },
   });
@@ -77,19 +81,22 @@ async function totpLogin(totp: string): Promise<ViewSession> {
   };
 }
 
-async function validateMpin(view: ViewSession): Promise<TradeSessionCredentials> {
+async function validateMpin(
+  account: AccountCredentials,
+  view: ViewSession,
+): Promise<TradeSessionCredentials> {
   const env = getEnv();
   const url = `${env.KOTAK_LOGIN_BASE_URL}/login/1.0/tradeApiValidate`;
   const payload = await kotakFetch(url, {
     method: "POST",
     headers: {
-      Authorization: env.KOTAK_ACCESS_TOKEN,
+      Authorization: account.accessToken,
       "neo-fin-key": env.KOTAK_NEO_FIN_KEY,
       sid: view.viewSid,
       Auth: view.viewToken,
     },
     body: {
-      mpin: env.KOTAK_MPIN,
+      mpin: account.mpin,
     },
   });
 
@@ -106,7 +113,7 @@ async function validateMpin(view: ViewSession): Promise<TradeSessionCredentials>
   );
 
   return {
-    accessToken: env.KOTAK_ACCESS_TOKEN,
+    accessToken: account.accessToken,
     tradingToken: parsed.data.data.token,
     tradingSid: parsed.data.data.sid,
     baseUrl,
@@ -114,9 +121,12 @@ async function validateMpin(view: ViewSession): Promise<TradeSessionCredentials>
   };
 }
 
-export async function loginWithTotp(totp: string): Promise<TradeSessionCredentials> {
-  const view = await totpLogin(totp);
-  return validateMpin(view);
+export async function loginWithTotp(
+  account: AccountCredentials,
+  totp: string,
+): Promise<TradeSessionCredentials> {
+  const view = await totpLogin(account, totp);
+  return validateMpin(account, view);
 }
 
 export async function logoutSession(session: TradeSessionCredentials): Promise<void> {

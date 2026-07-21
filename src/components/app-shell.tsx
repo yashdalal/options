@@ -1,15 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { LoginForm } from "@/components/login-form";
+import {
+  LoginForm,
+  type AccountAuthStatus,
+} from "@/components/login-form";
 import { MonitorDashboard } from "@/components/monitor-dashboard";
+import { ACCOUNT_DEFINITIONS } from "@/config/accounts";
 
 type AuthStatus = {
   authenticated: boolean;
   status: string;
   highlightDefault: number;
   configured?: boolean;
+  accounts?: AccountAuthStatus[];
 };
+
+const EMPTY_ACCOUNTS: AccountAuthStatus[] = ACCOUNT_DEFINITIONS.map((definition) => ({
+  accountId: definition.id,
+  label: definition.label,
+  status: "disconnected" as const,
+}));
 
 export function AppShell() {
   const [ready, setReady] = useState(false);
@@ -62,13 +73,23 @@ export function AppShell() {
   if (!auth?.authenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-100 p-4">
-        <div className="flex w-full max-w-md flex-col gap-3">
+        <div className="flex w-full max-w-lg flex-col gap-3">
           {auth?.configured === false ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              Copy `.env.example` to `.env.local` and fill in Kotak credentials before signing in.
+              Copy `.env.example` to `.env.local` and fill in credentials for Prakash, Gopa, and
+              HUF before connecting.
             </div>
           ) : null}
-          <LoginForm onAuthenticated={() => void loadStatus()} />
+          {auth?.status === "expired" || auth?.status === "partial" ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              All three accounts must be connected before the report is available. Connected
+              accounts are kept; reconnect only the accounts that still need a TOTP.
+            </div>
+          ) : null}
+          <LoginForm
+            accounts={auth?.accounts ?? EMPTY_ACCOUNTS}
+            onStatusChange={() => void loadStatus()}
+          />
         </div>
       </div>
     );

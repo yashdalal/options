@@ -5,6 +5,10 @@ test("login screen renders without crashing", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Near Expiry Monitor" })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByPlaceholder("123456")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByLabel("Prakash")).toBeVisible();
+  await expect(page.getByLabel("Gopa")).toBeVisible();
+  await expect(page.getByLabel("HUF")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect Prakash" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect Gopa" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect HUF" })).toBeVisible();
 });

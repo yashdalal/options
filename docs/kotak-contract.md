@@ -1,7 +1,21 @@
 # Kotak Neo API contract notes
 
 Captured from official documentation and sanitized fixtures.
-Live probe (`npm run probe:kotak`) should be run with real credentials to confirm production field names and rate limits.
+Live probe (`npm run probe:kotak -- --account=prakash`) should be run with real credentials to confirm production field names and rate limits.
+
+## Multi-account usage
+
+This app links three separate Kotak Neo logins (Prakash, Gopa, HUF). Each account has its own env-prefixed credentials:
+
+- `KOTAK_PRAKASH_*`
+- `KOTAK_GOPA_*`
+- `KOTAK_HUF_*`
+
+Each set includes access token, mobile number, UCC, and MPIN. Labels are hardcoded in `src/config/accounts.ts`.
+
+Each account is connected separately with its own TOTP and Connect action. Successful account sessions are retained while other accounts remain disconnected. The monitor report is available only when all three broker sessions are connected. If one later expires, the report is gated again and only that account needs a fresh TOTP.
+
+Positions are tagged with `accountId` / `accountLabel` for attribution. Within each expiry, positions are paired by company: same-strike calls/puts are combined across accounts on the summary row, with per-account legs available when expanded.
 
 ## Authentication
 
@@ -37,6 +51,8 @@ netQty = ((cfBuyQty + flBuyQty) - (cfSellQty + flSellQty)) / lotSz
 
 Ignore cash-market rows (`exSeg !== nse_fo`) and zero-net option rows.
 
+Kotak may return `stat: Not_Ok`, `stCode: 5203`, `errMsg: "No Data"` when an account has no open positions. Treat that as an empty book, not a hard failure.
+
 ## Open questions for live validation
 
 - Exact quote request encoding (query vs body) in current production
@@ -44,6 +60,7 @@ Ignore cash-market rows (`exSeg !== nse_fo`) and zero-net option rows.
 - Session lifetime and idle timeout
 - Whether option `optTp` arrives as `CE`/`PE` or `CALL`/`PUT`
 - Token stability across scrip-master regenerations
+- Whether positions payloads include a usable account id field (`actId`) in addition to our local tagging
 
 ## Fixture source
 

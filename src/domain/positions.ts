@@ -1,9 +1,15 @@
+import type { AccountId } from "@/config/accounts";
 import type { RawPosition } from "@/server/kotak/positions";
 import type {
   ScripInstrument,
   ScripMasterRegistry,
 } from "@/server/kotak/scrip-master";
 import type { NormalizedPosition, OptionType } from "./types";
+
+export type NormalizeAccountContext = {
+  accountId: AccountId;
+  accountLabel: string;
+};
 
 function toNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -118,8 +124,10 @@ function companyFromSymbol(tradingSymbol: string, fallback?: string): string {
 
 export function normalizePositions(
   rawPositions: RawPosition[],
-  registry?: ScripMasterRegistry,
+  registry: ScripMasterRegistry | undefined,
+  account: NormalizeAccountContext,
 ): NormalizedPosition[] {
+  const { accountId, accountLabel } = account;
   const normalized: NormalizedPosition[] = [];
 
   rawPositions.forEach((raw, index) => {
@@ -164,12 +172,15 @@ export function normalizePositions(
       tradingSymbol || resolved?.tradingSymbol || "",
       resolved?.underlying ?? raw.sym,
     );
+    const token = instrumentToken || resolved?.instrumentToken || tradingSymbol;
 
     normalized.push({
-      id: `${exchangeSegment}:${instrumentToken || tradingSymbol}:${index}`,
+      id: `${accountId}:${exchangeSegment}:${token}:${index}`,
+      accountId,
+      accountLabel,
       company,
       exchangeSegment,
-      instrumentToken: instrumentToken || resolved?.instrumentToken || tradingSymbol,
+      instrumentToken: token,
       tradingSymbol: tradingSymbol || resolved?.tradingSymbol || company,
       optionType,
       strike,

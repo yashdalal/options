@@ -41,6 +41,24 @@ const positionsResponseSchema = z.object({
 
 export type RawPosition = z.infer<typeof positionRowSchema>;
 
+export function isEmptyPositionsPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const stCode = String(record.stCode ?? "");
+  const message = String(record.errMsg ?? record.emsg ?? record.desc ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (stCode === "5203") {
+    return true;
+  }
+
+  return message === "no data" || message.includes("no data");
+}
+
 function summarizePayload(payload: unknown): Record<string, unknown> {
   if (payload === null) {
     return { payloadType: "null" };
@@ -69,6 +87,7 @@ function summarizePayload(payload: unknown): Record<string, unknown> {
 export async function fetchPositions(
   session: TradeSessionCredentials,
   requestId?: string,
+  accountId?: string,
 ): Promise<RawPosition[]> {
   const startedAt = Date.now();
   const host = new URL(session.baseUrl).hostname;
@@ -86,6 +105,7 @@ export async function fetchPositions(
   } catch (error) {
     logError("Kotak positions request failed", {
       requestId,
+      accountId,
       host,
       elapsedMs: Date.now() - startedAt,
       name: error instanceof Error ? error.name : "UnknownError",
@@ -99,15 +119,27 @@ export async function fetchPositions(
   const summary = summarizePayload(payload);
   logInfo("Kotak positions response received", {
     requestId,
+    accountId,
     host,
     elapsedMs: Date.now() - startedAt,
     ...summary,
   });
 
+  if (isEmptyPositionsPayload(payload)) {
+    logInfo("Kotak positions empty book", {
+      requestId,
+      accountId,
+      host,
+      ...summary,
+    });
+    return [];
+  }
+
   const failure = detectBrokerFailure(payload);
   if (failure) {
     logError("Kotak positions rejected", {
       requestId,
+      accountId,
       host,
       ...summary,
     });
@@ -123,6 +155,7 @@ export async function fetchPositions(
   if (!parsed.success) {
     logError("Unexpected Kotak positions response shape", {
       requestId,
+      accountId,
       host,
       ...summary,
       issues: parsed.error.issues.map((issue) => ({

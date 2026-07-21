@@ -1,46 +1,142 @@
-import type { NormalizedPosition, ReportRow } from "./types";
+import { ACCOUNT_DEFINITIONS, type AccountId } from "@/config/accounts";
+import type {
+  NormalizedPosition,
+  OptionType,
+  ReportRow,
+  ReportRowDetail,
+  ReportSide,
+} from "./types";
 import { calculateProximity } from "./proximity";
 
-function sortCalls(positions: NormalizedPosition[]): NormalizedPosition[] {
-  return [...positions].sort((a, b) => a.strike - b.strike || a.id.localeCompare(b.id));
+const ACCOUNT_ORDER = new Map(
+  ACCOUNT_DEFINITIONS.map((definition, index) => [definition.id, index]),
+);
+
+function sortStrikesAscending(strikes: number[]): number[] {
+  return [...strikes].sort((a, b) => a - b);
 }
 
-function sortPuts(positions: NormalizedPosition[]): NormalizedPosition[] {
-  return [...positions].sort((a, b) => b.strike - a.strike || a.id.localeCompare(b.id));
+function sortStrikesDescending(strikes: number[]): number[] {
+  return [...strikes].sort((a, b) => b - a);
+}
+
+function groupByStrike(
+  positions: NormalizedPosition[],
+): Map<number, NormalizedPosition[]> {
+  const byStrike = new Map<number, NormalizedPosition[]>();
+  for (const position of positions) {
+    const existing = byStrike.get(position.strike) ?? [];
+    existing.push(position);
+    byStrike.set(position.strike, existing);
+  }
+  return byStrike;
+}
+
+function aggregateSide(
+  optionType: OptionType,
+  strike: number,
+  positions: NormalizedPosition[],
+  spot: number | null,
+): ReportSide {
+  const lots = positions.reduce((sum, position) => sum + position.netQuantity, 0);
+  const shares = positions.reduce(
+    (sum, position) => sum + position.netQuantity * position.lotSize,
+    0,
+  );
+  return {
+    strike,
+    lots,
+    shares,
+    ...calculateProximity(optionType, strike, spot),
+  };
+}
+
+function buildDetails(
+  callPositions: NormalizedPosition[],
+  putPositions: NormalizedPosition[],
+  spot: number | null,
+): ReportRowDetail[] {
+  const byAccount = new Map<
+    AccountId,
+    { accountLabel: string; calls: NormalizedPosition[]; puts: NormalizedPosition[] }
+  >();
+
+  for (const position of callPositions) {
+    const existing = byAccount.get(position.accountId) ?? {
+      accountLabel: position.accountLabel,
+      calls: [],
+      puts: [],
+    };
+    existing.calls.push(position);
+    byAccount.set(position.accountId, existing);
+  }
+
+  for (const position of putPositions) {
+    const existing = byAccount.get(position.accountId) ?? {
+      accountLabel: position.accountLabel,
+      calls: [],
+      puts: [],
+    };
+    existing.puts.push(position);
+    byAccount.set(position.accountId, existing);
+  }
+
+  return [...byAccount.entries()]
+    .sort(
+      ([leftId], [rightId]) =>
+        (ACCOUNT_ORDER.get(leftId) ?? Number.MAX_SAFE_INTEGER) -
+        (ACCOUNT_ORDER.get(rightId) ?? Number.MAX_SAFE_INTEGER),
+    )
+    .map(([accountId, bucket]) => ({
+      accountId,
+      accountLabel: bucket.accountLabel,
+      call:
+        bucket.calls.length > 0
+          ? aggregateSide("CALL", bucket.calls[0]!.strike, bucket.calls, spot)
+          : null,
+      put:
+        bucket.puts.length > 0
+          ? aggregateSide("PUT", bucket.puts[0]!.strike, bucket.puts, spot)
+          : null,
+    }));
 }
 
 export function pairPositionsForCompany(
   positions: NormalizedPosition[],
   spot: number | null,
 ): ReportRow[] {
-  const calls = sortCalls(positions.filter((p) => p.optionType === "CALL"));
-  const puts = sortPuts(positions.filter((p) => p.optionType === "PUT"));
-  const company = positions[0]?.company ?? "";
-  const rowCount = Math.max(calls.length, puts.length);
+  const sample = positions[0];
+  if (!sample) {
+    return [];
+  }
+
+  const callsByStrike = groupByStrike(positions.filter((p) => p.optionType === "CALL"));
+  const putsByStrike = groupByStrike(positions.filter((p) => p.optionType === "PUT"));
+  const callStrikes = sortStrikesAscending([...callsByStrike.keys()]);
+  const putStrikes = sortStrikesDescending([...putsByStrike.keys()]);
+  const rowCount = Math.max(callStrikes.length, putStrikes.length);
   const rows: ReportRow[] = [];
 
   for (let i = 0; i < rowCount; i += 1) {
-    const call = calls[i];
-    const put = puts[i];
+    const callStrike = callStrikes[i];
+    const putStrike = putStrikes[i];
+    const callPositions =
+      callStrike === undefined ? [] : (callsByStrike.get(callStrike) ?? []);
+    const putPositions =
+      putStrike === undefined ? [] : (putsByStrike.get(putStrike) ?? []);
+
     rows.push({
-      company,
+      company: sample.company,
       spot,
-      call: call
-        ? {
-            strike: call.strike,
-            lots: call.netQuantity,
-            shares: call.netQuantity * call.lotSize,
-            ...calculateProximity("CALL", call.strike, spot),
-          }
-        : null,
-      put: put
-        ? {
-            strike: put.strike,
-            lots: put.netQuantity,
-            shares: put.netQuantity * put.lotSize,
-            ...calculateProximity("PUT", put.strike, spot),
-          }
-        : null,
+      call:
+        callStrike === undefined || callPositions.length === 0
+          ? null
+          : aggregateSide("CALL", callStrike, callPositions, spot),
+      put:
+        putStrike === undefined || putPositions.length === 0
+          ? null
+          : aggregateSide("PUT", putStrike, putPositions, spot),
+      details: buildDetails(callPositions, putPositions, spot),
     });
   }
 
@@ -69,11 +165,11 @@ export function buildExpiryGroups(
         byCompany.set(position.company, existing);
       }
 
-      const rows = [...byCompany.keys()]
-        .sort((a, b) => a.localeCompare(b))
-        .flatMap((company) =>
+      const rows = [...byCompany.entries()]
+        .sort(([leftCompany], [rightCompany]) => leftCompany.localeCompare(rightCompany))
+        .flatMap(([company, companyPositions]) =>
           pairPositionsForCompany(
-            byCompany.get(company) ?? [],
+            companyPositions,
             spotByCompany.get(company) ?? null,
           ),
         );

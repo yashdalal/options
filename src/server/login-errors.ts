@@ -2,7 +2,7 @@ import { isKotakApiError } from "@/server/kotak/errors";
 import { logError, safeErrorMessage } from "@/server/logging";
 
 const CONSUMER_KEY_MESSAGE =
-  "Kotak rejected the API token (Consumer Key / Access Token). In Neo → More → TradeAPI → API Dashboard, Create Application and paste the generated token into KOTAK_ACCESS_TOKEN with no Bearer prefix. Then complete TOTP Registration for the same account, restart npm run dev, and try a fresh TOTP.";
+  "Kotak rejected the API token (Consumer Key / Access Token). In Neo → More → TradeAPI → API Dashboard, Create Application and paste the generated token into the matching KOTAK_<ACCOUNT>_ACCESS_TOKEN with no Bearer prefix. Then complete TOTP Registration for that account, restart npm run dev, and try a fresh TOTP.";
 
 export type LoginErrorResponse = {
   status: number;

@@ -1,6 +1,7 @@
+import { ACCOUNT_DEFINITIONS, type AccountId } from "@/config/accounts";
 import { buildExpiryGroups } from "@/domain/pairing";
 import { normalizePositions } from "@/domain/positions";
-import type { MonitorSnapshot } from "@/domain/types";
+import type { AccountPositionSummary, MonitorSnapshot } from "@/domain/types";
 import type { TradeSessionCredentials } from "./kotak/auth";
 import { fetchPositions } from "./kotak/positions";
 import { fetchClosingQuotes } from "./kotak/quotes";
@@ -12,6 +13,7 @@ import { handleBrokerAuthFailure } from "./session";
 import { logInfo, logWarn } from "./logging";
 
 let inFlight: Promise<MonitorSnapshot> | null = null;
+let inFlightSessionKey: string | null = null;
 
 function reportDateIst(): string {
   return new Intl.DateTimeFormat("en-GB", {
@@ -24,18 +26,58 @@ function reportDateIst(): string {
     .replace(/ /g, "-");
 }
 
+function sessionKey(sessions: Record<AccountId, TradeSessionCredentials>): string {
+  return ACCOUNT_DEFINITIONS.map(
+    (definition) =>
+      `${definition.id}:${sessions[definition.id].tradingSid}:${sessions[definition.id].tradingToken.slice(0, 8)}`,
+  ).join("|");
+}
+
 async function buildSnapshot(
-  session: TradeSessionCredentials,
+  sessions: Record<AccountId, TradeSessionCredentials>,
   requestId: string,
 ): Promise<MonitorSnapshot> {
   logInfo("Reading positions...", {
     requestId,
     runtimeRegion: process.env.VERCEL_REGION ?? "local",
+    accounts: ACCOUNT_DEFINITIONS.map((definition) => definition.id),
   });
-  const rawPositions = await fetchPositions(session, requestId);
-  const registry = await loadScripMasterRegistry(session);
-  const positions = normalizePositions(rawPositions, registry);
-  logInfo(`Found ${positions.length} option positions`);
+
+  const firstSession = sessions[ACCOUNT_DEFINITIONS[0].id];
+  const registry = await loadScripMasterRegistry(firstSession);
+
+  const accountResults = await Promise.all(
+    ACCOUNT_DEFINITIONS.map(async (definition) => {
+      try {
+        const rawPositions = await fetchPositions(
+          sessions[definition.id],
+          requestId,
+          definition.id,
+        );
+        const positions = normalizePositions(rawPositions, registry, {
+          accountId: definition.id,
+          accountLabel: definition.label,
+        });
+        return {
+          accountId: definition.id,
+          accountLabel: definition.label,
+          positions,
+        };
+      } catch (error) {
+        handleBrokerAuthFailure(definition.id, error);
+        throw error;
+      }
+    }),
+  );
+
+  const positions = accountResults.flatMap((result) => result.positions);
+  const accountSummaries: AccountPositionSummary[] = accountResults.map((result) => ({
+    accountId: result.accountId,
+    accountLabel: result.accountLabel,
+    optionPositionCount: result.positions.length,
+  }));
+
+  logInfo(`Found ${positions.length} option positions across accounts`);
 
   const companies = [...new Set(positions.map((position) => position.company))];
   const instruments: {
@@ -62,7 +104,7 @@ async function buildSnapshot(
 
   logInfo("Downloading prices...");
   const quotes = await fetchClosingQuotes(
-    session,
+    firstSession,
     instruments.map((item) => ({
       instrumentToken: item.instrumentToken,
       exchangeSegment: item.exchangeSegment,
@@ -77,13 +119,13 @@ async function buildSnapshot(
     const quote = quoteByToken.get(
       `${instrument.exchangeSegment}:${instrument.instrumentToken}`,
     );
-    const close = quote?.previousClose ?? null;
-    if (close === null || close <= 0) {
+    const spot = quote?.previousClose ?? null;
+    if (spot === null || spot <= 0) {
       spotByCompany.set(instrument.company, null);
       missingSymbols.push(instrument.company);
       continue;
     }
-    spotByCompany.set(instrument.company, close);
+    spotByCompany.set(instrument.company, spot);
   }
 
   const uniqueMissing = [...new Set(missingSymbols)].sort();
@@ -102,26 +144,27 @@ async function buildSnapshot(
     optionPositionCount: positions.length,
     downloadedPriceCount,
     missingSymbols: uniqueMissing,
+    accountSummaries,
     groups,
   };
 }
 
 export async function getMonitorSnapshot(
-  session: TradeSessionCredentials,
+  sessions: Record<AccountId, TradeSessionCredentials>,
   requestId: string,
 ): Promise<MonitorSnapshot> {
-  if (inFlight) {
+  const key = sessionKey(sessions);
+  if (inFlight && inFlightSessionKey === key) {
     return inFlight;
   }
 
+  inFlightSessionKey = key;
   inFlight = (async () => {
     try {
-      return await buildSnapshot(session, requestId);
-    } catch (error) {
-      handleBrokerAuthFailure(error);
-      throw error;
+      return await buildSnapshot(sessions, requestId);
     } finally {
       inFlight = null;
+      inFlightSessionKey = null;
     }
   })();
 

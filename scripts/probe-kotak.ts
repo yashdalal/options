@@ -1,6 +1,8 @@
 import { config } from "dotenv";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { ACCOUNT_DEFINITIONS, isAccountId, type AccountId } from "../src/config/accounts";
+import { getAccountCredentials } from "../src/config/env";
 import { loginWithTotp, logoutSession } from "../src/server/kotak/auth";
 import { fetchPositions } from "../src/server/kotak/positions";
 import { fetchClosingQuotes } from "../src/server/kotak/quotes";
@@ -34,6 +36,17 @@ async function readTotp(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
+function readAccountId(): AccountId {
+  const fromArg = process.argv.find((arg) => arg.startsWith("--account="));
+  const value = fromArg?.slice("--account=".length) ?? "prakash";
+  if (!isAccountId(value)) {
+    throw new Error(
+      `Unknown account '${value}'. Use one of: ${ACCOUNT_DEFINITIONS.map((item) => item.id).join(", ")}`,
+    );
+  }
+  return value;
+}
+
 function summarizeKeys(value: unknown): string[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return [];
@@ -42,13 +55,15 @@ function summarizeKeys(value: unknown): string[] {
 }
 
 async function main(): Promise<void> {
+  const accountId = readAccountId();
+  const account = getAccountCredentials(accountId);
   const totp = await readTotp();
   if (!/^\d{6}$/.test(totp)) {
     throw new Error("TOTP must be a 6-digit code");
   }
 
-  console.log("Authenticating...");
-  const session = await loginWithTotp(totp);
+  console.log(`Authenticating ${account.label}...`);
+  const session = await loginWithTotp(account, totp);
   console.log("Trade session established. baseUrl host:", new URL(session.baseUrl).host);
 
   console.log("Fetching positions...");
@@ -62,7 +77,10 @@ async function main(): Promise<void> {
   const registry = await loadScripMasterRegistry(session);
   console.log(`Scrip registry tokens: ${registry.byToken.size}`);
 
-  const normalized = normalizePositions(positions, registry);
+  const normalized = normalizePositions(positions, registry, {
+    accountId: account.id,
+    accountLabel: account.label,
+  });
   console.log(`Open NSE option positions: ${normalized.length}`);
 
   const companies = [...new Set(normalized.map((item) => item.company))];
@@ -98,6 +116,8 @@ async function main(): Promise<void> {
     path.join(outDir, "sanitized-summary.json"),
     JSON.stringify(
       redactValue({
+        accountId: account.id,
+        accountLabel: account.label,
         positionCount: positions.length,
         optionPositionCount: normalized.length,
         companies,

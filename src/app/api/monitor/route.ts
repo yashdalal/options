@@ -5,15 +5,15 @@ import { getSessionCookieName } from "@/config/env";
 import { isKotakApiError } from "@/server/kotak/errors";
 import { logError, safeErrorMessage } from "@/server/logging";
 import { getMonitorSnapshot } from "@/server/monitor";
-import { requireSession } from "@/server/session";
+import { requireConnectedAccounts } from "@/server/session";
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(getSessionCookieName())?.value;
-    const credentials = requireSession(sessionId);
-    const snapshot = await getMonitorSnapshot(credentials, requestId);
+    const sessions = requireConnectedAccounts(sessionId);
+    const snapshot = await getMonitorSnapshot(sessions, requestId);
     return NextResponse.json(snapshot);
   } catch (error) {
     const status =

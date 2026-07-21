@@ -54,6 +54,27 @@ describe("broker response failures", () => {
   });
 });
 
+describe("empty positions payloads", () => {
+  it("treats Kotak No Data responses as an empty book", async () => {
+    const { isEmptyPositionsPayload } = await import("@/server/kotak/positions");
+    expect(
+      isEmptyPositionsPayload({
+        desc: [],
+        errMsg: "No Data",
+        stCode: 5203,
+        stat: "Not_Ok",
+      }),
+    ).toBe(true);
+    expect(
+      isEmptyPositionsPayload({
+        data: [{ tok: "1" }],
+        stCode: 200,
+        stat: "ok",
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("cash instrument resolution", () => {
   it("prefers EQ cash symbols when BL rows appear later in scrip master", () => {
     const csv = `pSymbol,pTrdSymbol,pSymBl,pInstrumentType

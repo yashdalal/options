@@ -1,35 +1,36 @@
 # Near Expiry Monitor
 
-Local-first Next.js dashboard that monitors open NSE option positions from a Kotak Neo account and highlights contracts trading near their strikes.
+Local-first Next.js dashboard that monitors open NSE option positions from three linked Kotak Neo accounts (Prakash, Gopa, and HUF) and highlights contracts trading near their strikes.
 
 ## What it does
 
-- Assisted Kotak login: TOTP in the browser; API token, mobile, UCC, and MPIN stay in `.env.local`
+- Assisted Kotak login: connect Prakash, Gopa, and HUF one at a time with separate TOTPs; API tokens, mobiles, UCCs, and MPINs stay in `.env.local`
+- Combines positions from all three accounts into one report, tagged by account
 - Reads positions from Kotak Neo (read-only usage; no order placement)
 - Resolves underlyings via daily scrip master files
 - Uses latest completed NSE close (`ohlc.close`) as Spot
-- Groups by expiry, pairs calls/puts without collapsing duplicates
+- Groups by expiry and company; combines same-strike calls/puts across accounts into one row (expand for per-account legs)
 - Editable highlight threshold stored in browser local storage
 - Manual refresh plus optional 60-second auto refresh
 
 ## Prerequisites
 
 - Node.js 20+
-- A Kotak Neo Trade API access token
-- Registered TOTP authenticator
-- UCC / client code
-- 6-digit MPIN
+- Kotak Neo Trade API access tokens for Prakash, Gopa, and HUF
+- Registered TOTP authenticator for each account
+- UCC / client code for each account
+- 6-digit MPIN for each account
 
 ## Setup
 
 ```bash
 cp .env.example .env.local
-# edit .env.local with your Kotak credentials
+# edit .env.local with KOTAK_PRAKASH_*, KOTAK_GOPA_*, and KOTAK_HUF_* credentials
 npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and enter the current TOTP.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and connect each account with its own Connect button whenever you have a fresh TOTP. Sessions are saved as you go. The report opens only when all three are connected. If one account later expires, the other sessions are kept and you only reconnect that account.
 
 ## Scripts
 
@@ -46,12 +47,12 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and enter the current TOTP.
 ### Live probe
 
 ```bash
-npm run probe:kotak
+npm run probe:kotak -- --account=prakash
 # or
-npm run probe:kotak -- --totp=123456
+npm run probe:kotak -- --account=gopa --totp=123456
 ```
 
-The probe authenticates, fetches positions/scrip master/quotes, writes a sanitized summary under `.cache/probe/`, and logs out.
+The probe authenticates one account, fetches positions/scrip master/quotes, writes a sanitized summary under `.cache/probe/`, and logs out.
 
 See [docs/kotak-contract.md](docs/kotak-contract.md) for endpoint notes and open questions.
 
@@ -64,13 +65,14 @@ See [docs/kotak-contract.md](docs/kotak-contract.md) for endpoint notes and open
 
 ## Project layout
 
+- `src/config/accounts.ts` — hardcoded account IDs/labels (Prakash, Gopa, HUF)
 - `src/domain` — pure normalization, pairing, proximity math
 - `src/server/kotak` — broker adapters
-- `src/server/session.ts` — in-memory single-account session
-- `src/server/monitor.ts` — snapshot orchestration with request dedupe
+- `src/server/session.ts` — in-memory aggregate session with one broker session per account
+- `src/server/monitor.ts` — multi-account snapshot orchestration with request dedupe
 - `src/app/api` — same-origin auth/monitor routes
 - `tests/fixtures/kotak` — sanitized fixtures
 
 ## Future hosting
 
-Prefer a persistent Node process / small VPS over serverless so the in-memory session and scrip-master cache remain simple. Keep REST polling as the correctness baseline before adding WebSockets.
+Prefer a persistent Node process / small VPS over serverless so the in-memory multi-account session and scrip-master cache remain simple. Keep REST polling as the correctness baseline before adding WebSockets.

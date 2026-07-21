@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { MonitorSnapshot } from "@/domain/types";
+import type { MonitorSnapshot, ReportRow, ReportSide } from "@/domain/types";
 import { shouldHighlightSide } from "@/domain/proximity";
 
 const THRESHOLD_KEY = "near_expiry_highlight_threshold";
@@ -49,6 +49,41 @@ function optionCellClass(emphasized: boolean): string {
   return `border-b border-zinc-100 px-3 py-2 whitespace-nowrap${emphasized ? " font-semibold text-red-600" : ""}`;
 }
 
+function accountBadgeClass(accountId: string): string {
+  if (accountId === "prakash") {
+    return "bg-sky-100 text-sky-900";
+  }
+  if (accountId === "gopa") {
+    return "bg-violet-100 text-violet-900";
+  }
+  return "bg-rose-100 text-rose-900";
+}
+
+function rowKey(row: ReportRow, index: number): string {
+  return `${row.company}-${row.call?.strike ?? "x"}-${row.put?.strike ?? "x"}-${index}`;
+}
+
+function SideCells({
+  side,
+  highlighted,
+}: {
+  side: ReportSide | null;
+  highlighted: boolean;
+}) {
+  return (
+    <>
+      <td className={optionCellClass(highlighted)}>
+        {side ? formatNumber(side.strike, 2) : "—"}
+      </td>
+      <td className={optionCellClass(highlighted)}>
+        {side ? formatPosition(side.lots, side.shares) : "—"}
+      </td>
+      <td className={optionCellClass(highlighted)}>{formatPercent(side?.pctNear)}</td>
+      <td className={optionCellClass(highlighted)}>{formatNumber(side?.inrNear)}</td>
+    </>
+  );
+}
+
 export function MonitorDashboard({
   highlightDefault,
   onLogout,
@@ -62,6 +97,7 @@ export function MonitorDashboard({
   const [selectedExpiry, setSelectedExpiry] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(() => readStoredThreshold(highlightDefault));
   const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     window.localStorage.setItem(THRESHOLD_KEY, String(threshold));
@@ -121,9 +157,25 @@ export function MonitorDashboard({
     );
   }, [snapshot, selectedExpiry]);
 
+  useEffect(() => {
+    setExpandedRows(new Set());
+  }, [selectedExpiry, snapshot?.generatedAt]);
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     onLogout();
+  }
+
+  function toggleRow(key: string) {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   }
 
   return (
@@ -132,7 +184,8 @@ export function MonitorDashboard({
         <div>
           <h1 className="text-xl font-semibold text-zinc-900">Near Expiry Monitor</h1>
           <p className="text-sm text-zinc-600">
-            Spot uses latest completed NSE close. Refresh is manual or every 60 seconds.
+            Combined report for Prakash, Gopa, and HUF. Spot uses NSE last traded price
+            (today's close after market hours). Refresh is manual or every 60 seconds.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -206,6 +259,14 @@ export function MonitorDashboard({
           Positions: {snapshot?.optionPositionCount ?? 0} · Prices:{" "}
           {snapshot?.downloadedPriceCount ?? 0}
         </span>
+        {snapshot?.accountSummaries.map((summary) => (
+          <span
+            key={summary.accountId}
+            className={`rounded-full px-2 py-0.5 font-medium ${accountBadgeClass(summary.accountId)}`}
+          >
+            {summary.accountLabel}: {summary.optionPositionCount}
+          </span>
+        ))}
         <span>
           Updated:{" "}
           {snapshot
@@ -241,6 +302,7 @@ export function MonitorDashboard({
           <thead className="sticky top-0 z-10 bg-zinc-50 shadow-[inset_0_-1px_0_#d4d4d8]">
             <tr className="text-left text-zinc-700">
               {[
+                "",
                 "Company",
                 "Spot",
                 "Call Strike",
@@ -253,7 +315,7 @@ export function MonitorDashboard({
                 "Put INR Near",
               ].map((heading) => (
                 <th
-                  key={heading}
+                  key={heading || "expand"}
                   className="border-b border-zinc-200 px-3 py-2 font-semibold whitespace-nowrap"
                 >
                   {heading}
@@ -264,52 +326,82 @@ export function MonitorDashboard({
           <tbody>
             {!activeGroup || activeGroup.rows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
+                <td colSpan={11} className="px-3 py-8 text-center text-zinc-500">
                   No open option positions for this expiry.
                 </td>
               </tr>
             ) : (
-              activeGroup.rows.map((row, index) => {
+              activeGroup.rows.flatMap((row, index) => {
+                const key = rowKey(row, index);
+                const expanded = expandedRows.has(key);
                 const callHighlighted = shouldHighlightSide(row.call?.pctNear, threshold);
                 const putHighlighted = shouldHighlightSide(row.put?.pctNear, threshold);
                 const highlighted = callHighlighted || putHighlighted;
-                return (
+                const canExpand = row.details.length > 0;
+                const summaryRow = (
                   <tr
-                    key={`${row.company}-${row.call?.strike ?? "x"}-${row.put?.strike ?? "x"}-${index}`}
-                    className={`${highlighted ? "bg-amber-100" : index % 2 === 0 ? "bg-white" : "bg-zinc-50"}`}
+                    key={key}
+                    className={`${highlighted ? "bg-amber-100" : index % 2 === 0 ? "bg-white" : "bg-zinc-50"}${canExpand ? " cursor-pointer hover:bg-zinc-100" : ""}`}
+                    onClick={() => {
+                      if (canExpand) {
+                        toggleRow(key);
+                      }
+                    }}
+                    aria-expanded={canExpand ? expanded : undefined}
                   >
+                    <td className="border-b border-zinc-100 px-3 py-2 text-zinc-500">
+                      {canExpand ? (expanded ? "▾" : "▸") : ""}
+                    </td>
                     <td
                       className={`border-b border-zinc-100 px-3 py-2 font-medium${highlighted ? " text-red-600" : " text-zinc-900"}`}
                     >
                       {row.company}
                     </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">{formatNumber(row.spot)}</td>
-                    <td className={optionCellClass(callHighlighted)}>
-                      {row.call ? formatNumber(row.call.strike, 2) : "—"}
+                    <td className="border-b border-zinc-100 px-3 py-2">
+                      {formatNumber(row.spot)}
                     </td>
-                    <td className={optionCellClass(callHighlighted)}>
-                      {row.call ? formatPosition(row.call.lots, row.call.shares) : "—"}
-                    </td>
-                    <td className={optionCellClass(callHighlighted)}>
-                      {formatPercent(row.call?.pctNear)}
-                    </td>
-                    <td className={optionCellClass(callHighlighted)}>
-                      {formatNumber(row.call?.inrNear)}
-                    </td>
-                    <td className={optionCellClass(putHighlighted)}>
-                      {row.put ? formatNumber(row.put.strike, 2) : "—"}
-                    </td>
-                    <td className={optionCellClass(putHighlighted)}>
-                      {row.put ? formatPosition(row.put.lots, row.put.shares) : "—"}
-                    </td>
-                    <td className={optionCellClass(putHighlighted)}>
-                      {formatPercent(row.put?.pctNear)}
-                    </td>
-                    <td className={optionCellClass(putHighlighted)}>
-                      {formatNumber(row.put?.inrNear)}
-                    </td>
+                    <SideCells side={row.call} highlighted={callHighlighted} />
+                    <SideCells side={row.put} highlighted={putHighlighted} />
                   </tr>
                 );
+
+                if (!expanded) {
+                  return [summaryRow];
+                }
+
+                const detailRows = row.details.map((detail) => {
+                  const detailCallHighlighted = shouldHighlightSide(
+                    detail.call?.pctNear,
+                    threshold,
+                  );
+                  const detailPutHighlighted = shouldHighlightSide(
+                    detail.put?.pctNear,
+                    threshold,
+                  );
+                  return (
+                    <tr
+                      key={`${key}-${detail.accountId}`}
+                      className="bg-zinc-50/80"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <td className="border-b border-zinc-100 px-3 py-2" />
+                      <td className="border-b border-zinc-100 px-3 py-2 whitespace-nowrap">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${accountBadgeClass(detail.accountId)}`}
+                        >
+                          {detail.accountLabel}
+                        </span>
+                      </td>
+                      <td className="border-b border-zinc-100 px-3 py-2 text-zinc-400">
+                        {formatNumber(row.spot)}
+                      </td>
+                      <SideCells side={detail.call} highlighted={detailCallHighlighted} />
+                      <SideCells side={detail.put} highlighted={detailPutHighlighted} />
+                    </tr>
+                  );
+                });
+
+                return [summaryRow, ...detailRows];
               })
             )}
           </tbody>

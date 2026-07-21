@@ -1,12 +1,23 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { ACCOUNT_IDS } from "@/config/accounts";
 import { getSessionCookieName, hasKotakCredentials } from "@/config/env";
-import { mapLoginError } from "@/server/login-errors";
 import { establishSession } from "@/server/session";
 
+const totpSchema = z.string().regex(/^\d{6}$/);
+
 const bodySchema = z.object({
-  totp: z.string().regex(/^\d{6}$/),
+  totps: z
+    .object({
+      prakash: totpSchema.optional(),
+      gopa: totpSchema.optional(),
+      huf: totpSchema.optional(),
+    })
+    .refine(
+      (value) => ACCOUNT_IDS.some((accountId) => Boolean(value[accountId])),
+      { message: "Provide at least one TOTP" },
+    ),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -21,12 +32,15 @@ export async function POST(request: Request): Promise<Response> {
     const json = await request.json();
     const parsed = bodySchema.safeParse(json);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Enter a valid 6-digit TOTP" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Enter valid 6-digit TOTPs for the accounts you are connecting" },
+        { status: 400 },
+      );
     }
 
-    const { sessionId } = await establishSession(parsed.data.totp);
+    const result = await establishSession(parsed.data.totps);
     const cookieStore = await cookies();
-    cookieStore.set(getSessionCookieName(), sessionId, {
+    cookieStore.set(getSessionCookieName(), result.sessionId, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -34,9 +48,33 @@ export async function POST(request: Request): Promise<Response> {
       maxAge: 60 * 60 * 12,
     });
 
-    return NextResponse.json({ status: "authenticated" });
+    const attemptedIds = ACCOUNT_IDS.filter((accountId) =>
+      Boolean(parsed.data.totps[accountId]),
+    );
+    const failedAttempts = result.accounts.filter(
+      (account) =>
+        attemptedIds.includes(account.accountId) && account.status !== "connected",
+    );
+
+    return NextResponse.json({
+      status: result.ready ? "authenticated" : "partial",
+      ready: result.ready,
+      accounts: result.accounts,
+      error: failedAttempts.length
+        ? failedAttempts
+            .map((account) => account.error ?? `Could not connect ${account.label}`)
+            .join("; ")
+        : undefined,
+    });
   } catch (error) {
-    const { status, error: message } = mapLoginError(error);
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error && error.message.startsWith("Invalid environment configuration")
+            ? "Check .env.local values (mobile must be +91XXXXXXXXXX, MPIN 6 digits)"
+            : "Unable to authenticate. Check the server terminal for details.",
+      },
+      { status: 500 },
+    );
   }
 }
