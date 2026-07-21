@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile, access } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { kotakFetch } from "./client";
@@ -32,7 +33,10 @@ export type ScripMasterRegistry = {
   cashBySymbol: Map<string, ScripInstrument>;
 };
 
-const CACHE_DIR = path.join(process.cwd(), ".cache", "scrip-master");
+const CACHE_DIR =
+  process.env.VERCEL === "1"
+    ? path.join(os.tmpdir(), "near-expiry", "scrip-master")
+    : path.join(process.cwd(), ".cache", "scrip-master");
 
 function todayIstDate(): string {
   return new Intl.DateTimeFormat("en-CA", {
