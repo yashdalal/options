@@ -96,12 +96,25 @@ export function MonitorDashboard({
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [selectedExpiry, setSelectedExpiry] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(() => readStoredThreshold(highlightDefault));
+  const [thresholdInput, setThresholdInput] = useState(() =>
+    String(readStoredThreshold(highlightDefault)),
+  );
   const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     window.localStorage.setItem(THRESHOLD_KEY, String(threshold));
   }, [threshold]);
+
+  function commitThresholdInput(raw: string) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      setThreshold(parsed);
+      setThresholdInput(String(parsed));
+      return;
+    }
+    setThresholdInput(String(threshold));
+  }
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -180,66 +193,73 @@ export function MonitorDashboard({
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
-      <header className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-zinc-900">Near Expiry Monitor</h1>
-          <p className="text-sm text-zinc-600">
-            Combined report for Prakash, Gopa, and HUF. Spot uses NSE last traded price
-            (today's close after market hours). Refresh is manual or every 60 seconds.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-zinc-700">
-            <input
-              type="checkbox"
-              checked={autoRefresh}
-              onChange={(event) => setAutoRefresh(event.target.checked)}
-            />
-            Auto refresh
-          </label>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            disabled={loading}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
-          >
-            {loading ? "Refreshing…" : "Refresh"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-          >
-            Logout
-          </button>
+      <header className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-zinc-900">Near Expiry Monitor</h1>
+            <p className="text-sm text-zinc-600">
+              Combined report for Prakash, Gopa, and HUF. Spot uses NSE last traded price.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 lg:justify-end">
+            <label
+              className="flex items-center gap-1.5 text-sm text-zinc-700"
+              title="Highlight rows when Call/Put % Near is below this value"
+            >
+              <span className="whitespace-nowrap text-zinc-600">Within</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={thresholdInput}
+                onChange={(event) => {
+                  const raw = event.target.value;
+                  if (raw !== "" && !/^\d*\.?\d*$/.test(raw)) {
+                    return;
+                  }
+                  setThresholdInput(raw);
+                  const parsed = Number(raw);
+                  if (Number.isFinite(parsed) && parsed > 0) {
+                    setThreshold(parsed);
+                  }
+                }}
+                onBlur={() => commitThresholdInput(thresholdInput)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    commitThresholdInput(thresholdInput);
+                    event.currentTarget.blur();
+                  }
+                }}
+                aria-label="Highlight when within this percent of spot"
+                className="w-16 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-center text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-200"
+              />
+              <span className="whitespace-nowrap text-zinc-600">% of spot</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-zinc-700">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(event) => setAutoRefresh(event.target.checked)}
+              />
+              Auto refresh
+            </label>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              disabled={loading}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {loading ? "Refreshing…" : "Refresh"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
-
-      <section className="grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:grid-cols-3">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-zinc-700">Highlight Threshold (%)</span>
-          <input
-            type="number"
-            min={0.01}
-            step={0.01}
-            value={threshold}
-            onChange={(event) => setThreshold(Number(event.target.value))}
-            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-200"
-          />
-        </label>
-        <div className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-zinc-700">Report Date</span>
-          <div className="rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 text-zinc-800">
-            {snapshot?.reportDate ?? "—"}
-          </div>
-        </div>
-        <div className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-zinc-700">Expiry</span>
-          <div className="rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 text-zinc-800">
-            {activeGroup?.expiryLabel ?? "—"}
-          </div>
-        </div>
-      </section>
 
       {(error || stale) && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -255,6 +275,7 @@ export function MonitorDashboard({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+        <span>Report {snapshot?.reportDate ?? "—"}</span>
         <span>
           Positions: {snapshot?.optionPositionCount ?? 0} · Prices:{" "}
           {snapshot?.downloadedPriceCount ?? 0}
@@ -280,21 +301,35 @@ export function MonitorDashboard({
         ) : null}
       </div>
 
-      <div className="flex gap-2 overflow-x-auto">
-        {snapshot?.groups.map((group) => (
-          <button
-            key={group.expiryIso}
-            type="button"
-            onClick={() => setSelectedExpiry(group.expiryIso)}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ${
-              activeGroup?.expiryIso === group.expiryIso
-                ? "bg-zinc-900 text-white"
-                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-            }`}
-          >
-            {group.expiryLabel}
-          </button>
-        ))}
+      <div className="flex flex-col gap-2">
+        <div className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+          Expiry
+        </div>
+        <div
+          className="flex gap-2 overflow-x-auto"
+          role="tablist"
+          aria-label="Expiry date"
+        >
+          {snapshot?.groups.map((group) => {
+            const selected = activeGroup?.expiryIso === group.expiryIso;
+            return (
+              <button
+                key={group.expiryIso}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setSelectedExpiry(group.expiryIso)}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ${
+                  selected
+                    ? "bg-zinc-900 text-white"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
+              >
+                {group.expiryLabel}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
