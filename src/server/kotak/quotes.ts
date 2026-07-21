@@ -7,9 +7,12 @@ import { logWarn } from "../logging";
 const quoteItemSchema = z
   .object({
     instrument_token: z.union([z.string(), z.number()]).optional(),
+    exchange_token: z.union([z.string(), z.number()]).optional(),
     pSymbol: z.union([z.string(), z.number()]).optional(),
     exchange_segment: z.string().optional(),
+    exchange: z.string().optional(),
     trading_symbol: z.string().optional(),
+    display_symbol: z.string().optional(),
     last_traded_price: z.union([z.string(), z.number()]).optional(),
     ohlc: z
       .object({
@@ -72,6 +75,10 @@ function chunk<T>(items: T[], size: number): T[][] {
   return groups;
 }
 
+function toQuoteToken(instrumentToken: string): string {
+  return instrumentToken === "26000" ? "Nifty 50" : instrumentToken;
+}
+
 export async function fetchClosingQuotes(
   session: TradeSessionCredentials,
   instruments: InstrumentRef[],
@@ -86,35 +93,38 @@ export async function fetchClosingQuotes(
 
   for (const batch of chunk([...unique.values()], batchSize)) {
     try {
-      const query = new URLSearchParams({
-        quote_type: "ohlc",
-        instrument_tokens: JSON.stringify(
-          batch.map((item) => ({
-            instrument_token: item.instrumentToken,
-            exchange_segment: item.exchangeSegment,
-          })),
-        ),
-      });
+      const requestedByQuoteKey = new Map(
+        batch.map((item) => [
+          `${item.exchangeSegment}:${toQuoteToken(item.instrumentToken)}`,
+          item,
+        ]),
+      );
+      const neoSymbols = batch
+        .map((item) => `${item.exchangeSegment}|${toQuoteToken(item.instrumentToken)}`)
+        .join(",");
 
       const payload = await kotakFetch(
-        `${session.baseUrl}/script-details/1.0/quotes/?${query.toString()}`,
+        `${session.baseUrl}/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neoSymbols)}/ohlc`,
         {
           method: "GET",
           headers: {
             Authorization: session.accessToken,
-            "neo-fin-key": session.neoFinKey,
+            "Content-Type": "application/x-www-form-urlencoded",
           },
         },
       );
 
       const items = extractItems(payload);
       for (const item of items) {
-        const token = String(item.instrument_token ?? item.pSymbol ?? "");
-        const segment = String(item.exchange_segment ?? "nse_cm");
+        const quoteToken = String(
+          item.instrument_token ?? item.exchange_token ?? item.pSymbol ?? "",
+        );
+        const segment = String(item.exchange_segment ?? item.exchange ?? "nse_cm");
+        const requested = requestedByQuoteKey.get(`${segment}:${quoteToken}`);
         results.push({
-          instrumentToken: token,
+          instrumentToken: requested?.instrumentToken ?? quoteToken,
           exchangeSegment: segment,
-          tradingSymbol: item.trading_symbol,
+          tradingSymbol: item.trading_symbol ?? item.display_symbol,
           previousClose: toNumber(item.ohlc?.close),
         });
       }

@@ -7,8 +7,10 @@ import type { TradeSessionCredentials } from "./auth";
 import { logInfo, logWarn } from "../logging";
 
 const scripMasterResponseSchema = z.object({
-  filesPaths: z.array(z.string().url()).default([]),
-  baseFolder: z.string().optional(),
+  data: z.object({
+    filesPaths: z.array(z.string().url()).default([]),
+    baseFolder: z.string().optional(),
+  }),
 });
 
 export type ScripInstrument = {
@@ -230,6 +232,36 @@ export function parseScripCsv(
   return instruments;
 }
 
+function cashInstrumentPreference(instrument: ScripInstrument): number {
+  if (instrument.tradingSymbol.endsWith("-EQ")) {
+    return 2;
+  }
+  if (!instrument.tradingSymbol.includes("-")) {
+    return 2;
+  }
+  return 1;
+}
+
+function preferCashInstrument(
+  existing: ScripInstrument | undefined,
+  candidate: ScripInstrument,
+): ScripInstrument {
+  if (!existing) {
+    return candidate;
+  }
+  return cashInstrumentPreference(candidate) > cashInstrumentPreference(existing)
+    ? candidate
+    : existing;
+}
+
+function setPreferredCashSymbol(
+  cashBySymbol: Map<string, ScripInstrument>,
+  key: string,
+  instrument: ScripInstrument,
+): void {
+  cashBySymbol.set(key, preferCashInstrument(cashBySymbol.get(key), instrument));
+}
+
 function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripMasterRegistry {
   const byToken = new Map<string, ScripInstrument>();
   const cashBySymbol = new Map<string, ScripInstrument>();
@@ -237,14 +269,20 @@ function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripM
   for (const instrument of instruments) {
     byToken.set(`${instrument.exchangeSegment}:${instrument.instrumentToken}`, instrument);
     if (instrument.exchangeSegment === "nse_cm") {
-      const symbol = instrument.underlying.toUpperCase();
-      cashBySymbol.set(symbol, instrument);
+      setPreferredCashSymbol(cashBySymbol, instrument.underlying.toUpperCase(), instrument);
       const withoutSuffix = instrument.tradingSymbol.replace(/-EQ$/i, "").toUpperCase();
-      cashBySymbol.set(withoutSuffix, instrument);
+      setPreferredCashSymbol(cashBySymbol, withoutSuffix, instrument);
     }
   }
 
   return { asOfDate, byToken, cashBySymbol };
+}
+
+export function buildScripMasterRegistryFromInstruments(
+  asOfDate: string,
+  instruments: ScripInstrument[],
+): ScripMasterRegistry {
+  return buildRegistry(asOfDate, instruments);
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -294,8 +332,8 @@ export async function loadScripMasterRegistry(
       throw new KotakApiError("Unexpected scrip master response", 500, "invalid_response");
     }
 
-    const foUrl = parsed.data.filesPaths.find((url) => url.includes("nse_fo"));
-    const cmUrl = parsed.data.filesPaths.find((url) => url.includes("nse_cm"));
+    const foUrl = parsed.data.data.filesPaths.find((url) => url.includes("nse_fo"));
+    const cmUrl = parsed.data.data.filesPaths.find((url) => url.includes("nse_cm"));
     if (!foUrl || !cmUrl) {
       throw new KotakApiError("Missing nse_fo/nse_cm scrip master files", 500, "invalid_response");
     }
@@ -341,12 +379,4 @@ export function resolveCashInstrument(
   underlying: string,
 ): ScripInstrument | null {
   return registry.cashBySymbol.get(underlying.toUpperCase()) ?? null;
-}
-
-export function resolveByToken(
-  registry: ScripMasterRegistry,
-  exchangeSegment: string,
-  instrumentToken: string,
-): ScripInstrument | null {
-  return registry.byToken.get(`${exchangeSegment}:${instrumentToken}`) ?? null;
 }

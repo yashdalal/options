@@ -32,19 +32,27 @@ async function buildSnapshot(session: TradeSessionCredentials): Promise<MonitorS
   logInfo(`Found ${positions.length} option positions`);
 
   const companies = [...new Set(positions.map((position) => position.company))];
-  const instruments = companies
-    .map((company) => {
-      const cash = resolveCashInstrument(registry, company);
-      if (!cash) {
-        return null;
-      }
-      return {
-        company,
-        instrumentToken: cash.instrumentToken,
-        exchangeSegment: cash.exchangeSegment,
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
+  const instruments: {
+    company: string;
+    instrumentToken: string;
+    exchangeSegment: string;
+  }[] = [];
+  const spotByCompany = new Map<string, number | null>();
+  const missingSymbols: string[] = [];
+
+  for (const company of companies) {
+    const cash = resolveCashInstrument(registry, company);
+    if (!cash) {
+      spotByCompany.set(company, null);
+      missingSymbols.push(company);
+      continue;
+    }
+    instruments.push({
+      company,
+      instrumentToken: cash.instrumentToken,
+      exchangeSegment: cash.exchangeSegment,
+    });
+  }
 
   logInfo("Downloading prices...");
   const quotes = await fetchClosingQuotes(
@@ -59,24 +67,17 @@ async function buildSnapshot(session: TradeSessionCredentials): Promise<MonitorS
     quotes.map((quote) => [`${quote.exchangeSegment}:${quote.instrumentToken}`, quote]),
   );
 
-  const spotByCompany = new Map<string, number | null>();
-  const missingSymbols: string[] = [];
-
-  for (const company of companies) {
-    const cash = resolveCashInstrument(registry, company);
-    if (!cash) {
-      spotByCompany.set(company, null);
-      missingSymbols.push(company);
-      continue;
-    }
-    const quote = quoteByToken.get(`${cash.exchangeSegment}:${cash.instrumentToken}`);
+  for (const instrument of instruments) {
+    const quote = quoteByToken.get(
+      `${instrument.exchangeSegment}:${instrument.instrumentToken}`,
+    );
     const close = quote?.previousClose ?? null;
     if (close === null || close <= 0) {
-      spotByCompany.set(company, null);
-      missingSymbols.push(company);
+      spotByCompany.set(instrument.company, null);
+      missingSymbols.push(instrument.company);
       continue;
     }
-    spotByCompany.set(company, close);
+    spotByCompany.set(instrument.company, close);
   }
 
   const uniqueMissing = [...new Set(missingSymbols)].sort();
@@ -84,10 +85,7 @@ async function buildSnapshot(session: TradeSessionCredentials): Promise<MonitorS
 
   logInfo(`Downloaded ${downloadedPriceCount} prices`);
   if (uniqueMissing.length > 0) {
-    logWarn("Could not download prices for:");
-    for (const symbol of uniqueMissing) {
-      console.warn(symbol);
-    }
+    logWarn("Could not download prices for", { symbols: uniqueMissing });
   }
 
   const groups = buildExpiryGroups(positions, spotByCompany);
@@ -121,8 +119,4 @@ export async function getMonitorSnapshot(
   })();
 
   return inFlight;
-}
-
-export function resetMonitorInFlightForTests(): void {
-  inFlight = null;
 }
