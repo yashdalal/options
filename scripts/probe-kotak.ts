@@ -5,7 +5,7 @@ import { ACCOUNT_DEFINITIONS, isAccountId, type AccountId } from "../src/config/
 import { getAccountCredentials } from "../src/config/env";
 import { loginWithTotp, logoutSession } from "../src/server/kotak/auth";
 import { fetchPositions } from "../src/server/kotak/positions";
-import { fetchClosingQuotes } from "../src/server/kotak/quotes";
+import { fetchSpotQuotes } from "../src/server/kotak/quotes";
 import {
   loadScripMasterRegistry,
   resolveCashInstrument,
@@ -97,8 +97,8 @@ async function main(): Promise<void> {
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
-  console.log("Fetching closing quotes...");
-  const quotes = await fetchClosingQuotes(
+  console.log("Fetching spot quotes...");
+  const quotes = await fetchSpotQuotes(
     session,
     instruments.map(({ instrumentToken, exchangeSegment }) => ({
       instrumentToken,
@@ -123,7 +123,7 @@ async function main(): Promise<void> {
         companies,
         samplePositionKeys: positions[0] ? summarizeKeys(positions[0]) : [],
         quoteCount: quotes.length,
-        quotesWithClose: quotes.filter((quote) => quote.previousClose !== null).length,
+        quotesWithSpot: quotes.filter((quote) => quote.spot !== null).length,
       }),
       null,
       2,

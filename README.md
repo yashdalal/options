@@ -8,7 +8,7 @@ Local-first Next.js dashboard that monitors open NSE option positions from three
 - Combines positions from all three accounts into one report, tagged by account
 - Reads positions from Kotak Neo (read-only usage; no order placement)
 - Resolves underlyings via daily scrip master files
-- Uses latest completed NSE close (`ohlc.close`) as Spot
+- Uses NSE `ltp` as Spot (today's session price / close after hours; not previous-day `ohlc.close`)
 - Groups by expiry and company; combines same-strike calls/puts across accounts into one row (expand for per-account legs)
 - Editable highlight threshold stored in browser local storage
 - Manual refresh plus optional 60-second auto refresh

@@ -39,7 +39,8 @@ Positions are tagged with `accountId` / `accountLabel` for attribution. Within e
 
 ## Spot price
 
-Use OHLC `close` as previous/latest completed close.
+Use full quotes (not `/ohlc`). Prefer `ltp` / `last_traded_price` for Spot.
+`ohlc.close` is previous-day close and is only a fallback.
 
 ## Positions quantity
 

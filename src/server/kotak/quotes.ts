@@ -14,6 +14,7 @@ const quoteItemSchema = z
     trading_symbol: z.string().optional(),
     display_symbol: z.string().optional(),
     last_traded_price: z.union([z.string(), z.number()]).optional(),
+    ltp: z.union([z.string(), z.number()]).optional(),
     ohlc: z
       .object({
         open: z.union([z.string(), z.number()]).optional(),
@@ -38,11 +39,11 @@ export type InstrumentRef = {
   exchangeSegment: string;
 };
 
-export type ClosingQuote = {
+export type SpotQuote = {
   instrumentToken: string;
   exchangeSegment: string;
   tradingSymbol?: string;
-  previousClose: number | null;
+  spot: number | null;
 };
 
 function toNumber(value: unknown): number | null {
@@ -54,6 +55,14 @@ function toNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function resolveSpot(item: z.infer<typeof quoteItemSchema>): number | null {
+  return (
+    toNumber(item.ltp) ??
+    toNumber(item.last_traded_price) ??
+    toNumber(item.ohlc?.close)
+  );
 }
 
 function extractItems(payload: unknown): z.infer<typeof quoteItemSchema>[] {
@@ -79,17 +88,17 @@ function toQuoteToken(instrumentToken: string): string {
   return instrumentToken === "26000" ? "Nifty 50" : instrumentToken;
 }
 
-export async function fetchClosingQuotes(
+export async function fetchSpotQuotes(
   session: TradeSessionCredentials,
   instruments: InstrumentRef[],
   batchSize = 50,
-): Promise<ClosingQuote[]> {
+): Promise<SpotQuote[]> {
   const unique = new Map<string, InstrumentRef>();
   for (const item of instruments) {
     unique.set(`${item.exchangeSegment}:${item.instrumentToken}`, item);
   }
 
-  const results: ClosingQuote[] = [];
+  const results: SpotQuote[] = [];
 
   for (const batch of chunk([...unique.values()], batchSize)) {
     try {
@@ -104,7 +113,7 @@ export async function fetchClosingQuotes(
         .join(",");
 
       const payload = await kotakFetch(
-        `${session.baseUrl}/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neoSymbols)}/ohlc`,
+        `${session.baseUrl}/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neoSymbols)}`,
         {
           method: "GET",
           headers: {
@@ -125,7 +134,7 @@ export async function fetchClosingQuotes(
           instrumentToken: requested?.instrumentToken ?? quoteToken,
           exchangeSegment: segment,
           tradingSymbol: item.trading_symbol ?? item.display_symbol,
-          previousClose: toNumber(item.ohlc?.close),
+          spot: resolveSpot(item),
         });
       }
     } catch (error) {
@@ -137,7 +146,7 @@ export async function fetchClosingQuotes(
         results.push({
           instrumentToken: item.instrumentToken,
           exchangeSegment: item.exchangeSegment,
-          previousClose: null,
+          spot: null,
         });
       }
     }

@@ -4,7 +4,7 @@ import { normalizePositions } from "@/domain/positions";
 import type { AccountPositionSummary, MonitorSnapshot } from "@/domain/types";
 import type { TradeSessionCredentials } from "./kotak/auth";
 import { fetchPositions } from "./kotak/positions";
-import { fetchClosingQuotes } from "./kotak/quotes";
+import { fetchSpotQuotes } from "./kotak/quotes";
 import {
   loadScripMasterRegistry,
   resolveCashInstrument,
@@ -103,7 +103,7 @@ async function buildSnapshot(
   }
 
   logInfo("Downloading prices...");
-  const quotes = await fetchClosingQuotes(
+  const quotes = await fetchSpotQuotes(
     firstSession,
     instruments.map((item) => ({
       instrumentToken: item.instrumentToken,
@@ -119,7 +119,7 @@ async function buildSnapshot(
     const quote = quoteByToken.get(
       `${instrument.exchangeSegment}:${instrument.instrumentToken}`,
     );
-    const spot = quote?.previousClose ?? null;
+    const spot = quote?.spot ?? null;
     if (spot === null || spot <= 0) {
       spotByCompany.set(instrument.company, null);
       missingSymbols.push(instrument.company);
