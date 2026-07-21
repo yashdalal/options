@@ -57,10 +57,6 @@ export function getHighlightDefault(): number {
   return Number.isFinite(value) && value > 0 ? value : 10;
 }
 
-export function isDemoMode(): boolean {
-  return process.env.DEMO_MODE?.trim().toLowerCase() === "true";
-}
-
 export function getSessionCookieName(): string {
   return process.env.SESSION_COOKIE_NAME?.trim() || "near_expiry_session";
 }

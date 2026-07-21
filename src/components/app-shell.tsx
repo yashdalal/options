@@ -9,7 +9,6 @@ type AuthStatus = {
   status: string;
   highlightDefault: number;
   configured?: boolean;
-  demo?: boolean;
 };
 
 export function AppShell() {
@@ -79,7 +78,6 @@ export function AppShell() {
     <div className="min-h-screen bg-zinc-100">
       <MonitorDashboard
         highlightDefault={auth.highlightDefault}
-        demo={auth.demo}
         onLogout={() => void loadStatus()}
         onLoginRequired={() => void loadStatus()}
       />

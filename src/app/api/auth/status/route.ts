@@ -1,24 +1,9 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import {
-  getHighlightDefault,
-  getSessionCookieName,
-  hasKotakCredentials,
-  isDemoMode,
-} from "@/config/env";
+import { getHighlightDefault, getSessionCookieName, hasKotakCredentials } from "@/config/env";
 import { getActiveSessionId, getSessionState } from "@/server/session";
 
 export async function GET(): Promise<Response> {
-  if (isDemoMode()) {
-    return NextResponse.json({
-      authenticated: true,
-      status: "demo",
-      highlightDefault: getHighlightDefault(),
-      configured: hasKotakCredentials(),
-      demo: true,
-    });
-  }
-
   const cookieStore = await cookies();
   const cookieSessionId = cookieStore.get(getSessionCookieName())?.value;
   const activeSessionId = getActiveSessionId();

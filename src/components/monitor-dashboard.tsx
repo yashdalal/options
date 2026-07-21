@@ -8,7 +8,6 @@ const THRESHOLD_KEY = "near_expiry_highlight_threshold";
 
 type MonitorDashboardProps = {
   highlightDefault: number;
-  demo?: boolean;
   onLogout: () => void;
   onLoginRequired: () => void;
 };
@@ -48,7 +47,6 @@ function optionCellClass(emphasized: boolean): string {
 
 export function MonitorDashboard({
   highlightDefault,
-  demo = false,
   onLogout,
   onLoginRequired,
 }: MonitorDashboardProps) {
@@ -128,18 +126,9 @@ export function MonitorDashboard({
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
       <header className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold text-zinc-900">Near Expiry Monitor</h1>
-            {demo ? (
-              <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800">
-                Demo data
-              </span>
-            ) : null}
-          </div>
+          <h1 className="text-xl font-semibold text-zinc-900">Near Expiry Monitor</h1>
           <p className="text-sm text-zinc-600">
-            {demo
-              ? "Generated sample positions. No Kotak account data is being used."
-              : "Spot uses latest completed NSE close. Refresh is manual or every 60 seconds."}
+            Spot uses latest completed NSE close. Refresh is manual or every 60 seconds.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -159,15 +148,13 @@ export function MonitorDashboard({
           >
             {loading ? "Refreshing…" : "Refresh"}
           </button>
-          {!demo ? (
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-            >
-              Logout
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => void logout()}
+            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+          >
+            Logout
+          </button>
         </div>
       </header>
 

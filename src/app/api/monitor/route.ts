@@ -1,17 +1,12 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getSessionCookieName, isDemoMode } from "@/config/env";
-import { getDemoMonitorSnapshot } from "@/server/demo-snapshot";
+import { getSessionCookieName } from "@/config/env";
 import { isKotakApiError } from "@/server/kotak/errors";
 import { getMonitorSnapshot } from "@/server/monitor";
 import { requireSession } from "@/server/session";
 
 export async function GET(): Promise<Response> {
   try {
-    if (isDemoMode()) {
-      return NextResponse.json(getDemoMonitorSnapshot());
-    }
-
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(getSessionCookieName())?.value;
     const credentials = requireSession(sessionId);
