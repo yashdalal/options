@@ -30,14 +30,19 @@ export function calculateProximity(
   };
 }
 
+export function shouldHighlightSide(
+  pctNear: number | null | undefined,
+  threshold: number,
+): boolean {
+  return typeof pctNear === "number" && Number.isFinite(pctNear) && pctNear < threshold;
+}
+
 export function shouldHighlightRow(
   callPctNear: number | null | undefined,
   putPctNear: number | null | undefined,
   threshold: number,
 ): boolean {
-  const callHit =
-    typeof callPctNear === "number" && Number.isFinite(callPctNear) && callPctNear < threshold;
-  const putHit =
-    typeof putPctNear === "number" && Number.isFinite(putPctNear) && putPctNear < threshold;
-  return callHit || putHit;
+  return (
+    shouldHighlightSide(callPctNear, threshold) || shouldHighlightSide(putPctNear, threshold)
+  );
 }

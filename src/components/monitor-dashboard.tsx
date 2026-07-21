@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MonitorSnapshot } from "@/domain/types";
-import { shouldHighlightRow } from "@/domain/proximity";
+import { shouldHighlightSide } from "@/domain/proximity";
 
 const THRESHOLD_KEY = "near_expiry_highlight_threshold";
 
 type MonitorDashboardProps = {
   highlightDefault: number;
+  demo?: boolean;
   onLogout: () => void;
   onLoginRequired: () => void;
 };
@@ -41,8 +42,13 @@ function formatPercent(value: number | null | undefined): string {
   return `${value.toFixed(2)}%`;
 }
 
+function optionCellClass(emphasized: boolean): string {
+  return `border-b border-zinc-100 px-3 py-2${emphasized ? " font-semibold text-zinc-900" : ""}`;
+}
+
 export function MonitorDashboard({
   highlightDefault,
+  demo = false,
   onLogout,
   onLoginRequired,
 }: MonitorDashboardProps) {
@@ -122,9 +128,18 @@ export function MonitorDashboard({
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
       <header className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900">Near Expiry Monitor</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold text-zinc-900">Near Expiry Monitor</h1>
+            {demo ? (
+              <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800">
+                Demo data
+              </span>
+            ) : null}
+          </div>
           <p className="text-sm text-zinc-600">
-            Spot uses latest completed NSE close. Refresh is manual or every 60 seconds.
+            {demo
+              ? "Generated sample positions. No Kotak account data is being used."
+              : "Spot uses latest completed NSE close. Refresh is manual or every 60 seconds."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -144,13 +159,15 @@ export function MonitorDashboard({
           >
             {loading ? "Refreshing…" : "Refresh"}
           </button>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-          >
-            Logout
-          </button>
+          {!demo ? (
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+            >
+              Logout
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -260,11 +277,9 @@ export function MonitorDashboard({
               </tr>
             ) : (
               activeGroup.rows.map((row, index) => {
-                const highlighted = shouldHighlightRow(
-                  row.call?.pctNear,
-                  row.put?.pctNear,
-                  threshold,
-                );
+                const callHighlighted = shouldHighlightSide(row.call?.pctNear, threshold);
+                const putHighlighted = shouldHighlightSide(row.put?.pctNear, threshold);
+                const highlighted = callHighlighted || putHighlighted;
                 return (
                   <tr
                     key={`${row.company}-${row.call?.strike ?? "x"}-${row.put?.strike ?? "x"}-${index}`}
@@ -274,22 +289,22 @@ export function MonitorDashboard({
                       {row.company}
                     </td>
                     <td className="border-b border-zinc-100 px-3 py-2">{formatNumber(row.spot)}</td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
+                    <td className={optionCellClass(callHighlighted)}>
                       {row.call ? formatNumber(row.call.strike, 2) : "—"}
                     </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
+                    <td className={optionCellClass(callHighlighted)}>
                       {formatPercent(row.call?.pctNear)}
                     </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
+                    <td className={optionCellClass(callHighlighted)}>
                       {formatNumber(row.call?.inrNear)}
                     </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
+                    <td className={optionCellClass(putHighlighted)}>
                       {row.put ? formatNumber(row.put.strike, 2) : "—"}
                     </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
+                    <td className={optionCellClass(putHighlighted)}>
                       {formatPercent(row.put?.pctNear)}
                     </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
+                    <td className={optionCellClass(putHighlighted)}>
                       {formatNumber(row.put?.inrNear)}
                     </td>
                   </tr>

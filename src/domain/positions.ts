@@ -63,7 +63,7 @@ export function parseExpiryValue(value: string | undefined): string | null {
     return `${iso[1]}-${iso[2]}-${iso[3]}`;
   }
 
-  const dmy = value.match(/^(\d{1,2})[- ]([A-Za-z]{3})[- ](\d{2,4})$/);
+  const dmy = value.match(/^(\d{1,2})[- ]([A-Za-z]{3}),?[- ]+(\d{2,4})$/);
   if (dmy) {
     const monthMap: Record<string, string> = {
       jan: "01",

@@ -12,6 +12,7 @@ import {
   calculatePctNear,
   calculateProximity,
   shouldHighlightRow,
+  shouldHighlightSide,
 } from "@/domain/proximity";
 import { parseScripCsv } from "@/server/kotak/scrip-master";
 import { readFileSync } from "node:fs";
@@ -80,6 +81,7 @@ describe("normalizePositions", () => {
 describe("expiry parsing", () => {
   it("parses day-month-year and formats labels with year", () => {
     expect(parseExpiryValue("31-Jul-2025")).toBe("2025-07-31");
+    expect(parseExpiryValue("28 Jul, 2026")).toBe("2026-07-28");
     expect(formatExpiryLabel("2025-07-31")).toBe("31 JUL 2025");
   });
 });
@@ -146,6 +148,9 @@ describe("proximity", () => {
   });
 
   it("highlights only when a present percent is below threshold", () => {
+    expect(shouldHighlightSide(5, 10)).toBe(true);
+    expect(shouldHighlightSide(12, 10)).toBe(false);
+    expect(shouldHighlightSide(null, 10)).toBe(false);
     expect(shouldHighlightRow(5, null, 10)).toBe(true);
     expect(shouldHighlightRow(null, 12, 10)).toBe(false);
     expect(shouldHighlightRow(null, null, 10)).toBe(false);
