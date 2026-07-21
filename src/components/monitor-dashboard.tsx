@@ -41,8 +41,12 @@ function formatPercent(value: number | null | undefined): string {
   return `${value.toFixed(2)}%`;
 }
 
+function formatPosition(lots: number, shares: number): string {
+  return `${formatNumber(lots, 0)} (${formatNumber(shares, 0)})`;
+}
+
 function optionCellClass(emphasized: boolean): string {
-  return `border-b border-zinc-100 px-3 py-2${emphasized ? " font-semibold text-red-600" : ""}`;
+  return `border-b border-zinc-100 px-3 py-2 whitespace-nowrap${emphasized ? " font-semibold text-red-600" : ""}`;
 }
 
 export function MonitorDashboard({
@@ -240,9 +244,11 @@ export function MonitorDashboard({
                 "Company",
                 "Spot",
                 "Call Strike",
+                "Call Lots (Shares)",
                 "Call % Near",
                 "Call INR Near",
                 "Put Strike",
+                "Put Lots (Shares)",
                 "Put % Near",
                 "Put INR Near",
               ].map((heading) => (
@@ -258,7 +264,7 @@ export function MonitorDashboard({
           <tbody>
             {!activeGroup || activeGroup.rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-zinc-500">
+                <td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
                   No open option positions for this expiry.
                 </td>
               </tr>
@@ -282,6 +288,9 @@ export function MonitorDashboard({
                       {row.call ? formatNumber(row.call.strike, 2) : "—"}
                     </td>
                     <td className={optionCellClass(callHighlighted)}>
+                      {row.call ? formatPosition(row.call.lots, row.call.shares) : "—"}
+                    </td>
+                    <td className={optionCellClass(callHighlighted)}>
                       {formatPercent(row.call?.pctNear)}
                     </td>
                     <td className={optionCellClass(callHighlighted)}>
@@ -289,6 +298,9 @@ export function MonitorDashboard({
                     </td>
                     <td className={optionCellClass(putHighlighted)}>
                       {row.put ? formatNumber(row.put.strike, 2) : "—"}
+                    </td>
+                    <td className={optionCellClass(putHighlighted)}>
+                      {row.put ? formatPosition(row.put.lots, row.put.shares) : "—"}
                     </td>
                     <td className={optionCellClass(putHighlighted)}>
                       {formatPercent(row.put?.pctNear)}

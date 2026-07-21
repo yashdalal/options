@@ -28,12 +28,16 @@ export function pairPositionsForCompany(
       call: call
         ? {
             strike: call.strike,
+            lots: call.netQuantity,
+            shares: call.netQuantity * call.lotSize,
             ...calculateProximity("CALL", call.strike, spot),
           }
         : null,
       put: put
         ? {
             strike: put.strike,
+            lots: put.netQuantity,
+            shares: put.netQuantity * put.lotSize,
             ...calculateProximity("PUT", put.strike, spot),
           }
         : null,

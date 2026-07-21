@@ -16,6 +16,8 @@ export type NormalizedPosition = {
 
 export type ReportSide = {
   strike: number;
+  lots: number;
+  shares: number;
   inrNear: number | null;
   pctNear: number | null;
 };
