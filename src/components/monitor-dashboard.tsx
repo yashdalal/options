@@ -42,7 +42,7 @@ function formatPercent(value: number | null | undefined): string {
 }
 
 function optionCellClass(emphasized: boolean): string {
-  return `border-b border-zinc-100 px-3 py-2${emphasized ? " font-semibold text-zinc-900" : ""}`;
+  return `border-b border-zinc-100 px-3 py-2${emphasized ? " font-semibold text-red-600" : ""}`;
 }
 
 export function MonitorDashboard({
@@ -272,7 +272,9 @@ export function MonitorDashboard({
                     key={`${row.company}-${row.call?.strike ?? "x"}-${row.put?.strike ?? "x"}-${index}`}
                     className={`${highlighted ? "bg-amber-100" : index % 2 === 0 ? "bg-white" : "bg-zinc-50"}`}
                   >
-                    <td className="border-b border-zinc-100 px-3 py-2 font-medium text-zinc-900">
+                    <td
+                      className={`border-b border-zinc-100 px-3 py-2 font-medium${highlighted ? " text-red-600" : " text-zinc-900"}`}
+                    >
                       {row.company}
                     </td>
                     <td className="border-b border-zinc-100 px-3 py-2">{formatNumber(row.spot)}</td>
