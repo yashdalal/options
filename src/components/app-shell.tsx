@@ -6,6 +6,7 @@ import {
   type AccountAuthStatus,
 } from "@/components/login-form";
 import { MonitorDashboard } from "@/components/monitor-dashboard";
+import { OptionsScreener } from "@/components/options-screener";
 import { ACCOUNT_DEFINITIONS } from "@/config/accounts";
 
 type AuthStatus = {
@@ -15,6 +16,8 @@ type AuthStatus = {
   configured?: boolean;
   accounts?: AccountAuthStatus[];
 };
+
+type AppTab = "monitor" | "screener";
 
 const EMPTY_ACCOUNTS: AccountAuthStatus[] = ACCOUNT_DEFINITIONS.map((definition) => ({
   accountId: definition.id,
@@ -26,6 +29,7 @@ export function AppShell() {
   const [ready, setReady] = useState(false);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<AppTab>("monitor");
 
   const loadStatus = useCallback(async () => {
     try {
@@ -97,11 +101,52 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-zinc-100">
-      <MonitorDashboard
-        highlightDefault={auth.highlightDefault}
-        onLogout={() => void loadStatus()}
-        onLoginRequired={() => void loadStatus()}
-      />
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-0 px-4 pt-4 sm:px-6">
+        <div
+          className="flex gap-2"
+          role="tablist"
+          aria-label="Application views"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "monitor"}
+            onClick={() => setTab("monitor")}
+            className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+              tab === "monitor"
+                ? "bg-zinc-900 text-white"
+                : "bg-white text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50"
+            }`}
+          >
+            Near Expiry
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "screener"}
+            onClick={() => setTab("screener")}
+            className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+              tab === "screener"
+                ? "bg-zinc-900 text-white"
+                : "bg-white text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50"
+            }`}
+          >
+            Screener
+          </button>
+        </div>
+      </div>
+      {tab === "monitor" ? (
+        <MonitorDashboard
+          highlightDefault={auth.highlightDefault}
+          onLogout={() => void loadStatus()}
+          onLoginRequired={() => void loadStatus()}
+        />
+      ) : (
+        <OptionsScreener
+          onLogout={() => void loadStatus()}
+          onLoginRequired={() => void loadStatus()}
+        />
+      )}
     </div>
   );
 }

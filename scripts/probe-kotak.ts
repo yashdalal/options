@@ -4,9 +4,12 @@ import path from "node:path";
 import { ACCOUNT_DEFINITIONS, isAccountId, type AccountId } from "../src/config/accounts";
 import { getAccountCredentials } from "../src/config/env";
 import { loginWithTotp, logoutSession } from "../src/server/kotak/auth";
+import { checkMargin } from "../src/server/kotak/margin";
 import { fetchPositions } from "../src/server/kotak/positions";
-import { fetchSpotQuotes } from "../src/server/kotak/quotes";
+import { fetchQuotes, fetchSpotQuotes } from "../src/server/kotak/quotes";
 import {
+  listOptionsForUnderlyingExpiry,
+  listOptionUnderlyings,
   loadScripMasterRegistry,
   resolveCashInstrument,
 } from "../src/server/kotak/scrip-master";
@@ -76,6 +79,7 @@ async function main(): Promise<void> {
   console.log("Loading scrip master...");
   const registry = await loadScripMasterRegistry(session);
   console.log(`Scrip registry tokens: ${registry.byToken.size}`);
+  console.log(`Option underlyings: ${listOptionUnderlyings(registry).length}`);
 
   const normalized = normalizePositions(positions, registry, {
     accountId: account.id,
@@ -110,6 +114,58 @@ async function main(): Promise<void> {
     console.log("Sample quote:", redactValue(quotes[0]));
   }
 
+  let foQuoteSample: unknown = null;
+  let marginSample: unknown = null;
+  const sampleUnderlying = listOptionUnderlyings(registry)[0];
+  if (sampleUnderlying) {
+    const firstExpiry =
+      registry.optionsByUnderlying.get(sampleUnderlying)?.[0]?.expiryIso ?? "";
+    const sampleOptions = listOptionsForUnderlyingExpiry(
+      registry,
+      sampleUnderlying,
+      firstExpiry,
+    ).filter((option) => option.optionType && option.strike !== null);
+    const sampleOption = sampleOptions[0];
+    if (sampleOption) {
+      console.log(
+        `Fetching FO option quote for ${sampleOption.tradingSymbol} (${sampleOption.instrumentToken})...`,
+      );
+      const foQuotes = await fetchQuotes(session, [
+        {
+          instrumentToken: sampleOption.instrumentToken,
+          exchangeSegment: sampleOption.exchangeSegment,
+        },
+      ]);
+      foQuoteSample = foQuotes[0] ?? null;
+      console.log("Sample FO quote:", redactValue(foQuoteSample));
+
+      const premium = foQuotes[0]?.ltp;
+      if (premium && premium > 0) {
+        console.log("Checking sell margin for sample option...");
+        try {
+          const margin = await checkMargin(session, {
+            instrumentToken: sampleOption.instrumentToken,
+            exchangeSegment: sampleOption.exchangeSegment,
+            tradingSymbol: sampleOption.tradingSymbol,
+            price: premium,
+            quantity: sampleOption.lotSize,
+            transactionType: "S",
+          });
+          marginSample = {
+            instrumentToken: margin.instrumentToken,
+            totalMarginUsed: margin.totalMarginUsed,
+          };
+          console.log("Sample margin:", redactValue(marginSample));
+        } catch (error) {
+          console.log(
+            "Margin probe failed:",
+            error instanceof Error ? error.message : error,
+          );
+        }
+      }
+    }
+  }
+
   const outDir = path.join(process.cwd(), ".cache", "probe");
   await mkdir(outDir, { recursive: true });
   await writeFile(
@@ -120,10 +176,13 @@ async function main(): Promise<void> {
         accountLabel: account.label,
         positionCount: positions.length,
         optionPositionCount: normalized.length,
+        optionUnderlyingCount: listOptionUnderlyings(registry).length,
         companies,
         samplePositionKeys: positions[0] ? summarizeKeys(positions[0]) : [],
         quoteCount: quotes.length,
         quotesWithSpot: quotes.filter((quote) => quote.spot !== null).length,
+        foQuoteSample,
+        marginSample,
       }),
       null,
       2,

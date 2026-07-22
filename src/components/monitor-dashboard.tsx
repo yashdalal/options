@@ -171,6 +171,8 @@ export function MonitorDashboard({
   }, [snapshot, selectedExpiry]);
 
   useEffect(() => {
+    // Reset expanded rows when the visible expiry snapshot changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional view reset
     setExpandedRows(new Set());
   }, [selectedExpiry, snapshot?.generatedAt]);
 

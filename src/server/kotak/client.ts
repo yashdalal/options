@@ -87,6 +87,7 @@ export type RequestOptions = {
   method?: "GET" | "POST";
   headers?: Record<string, string>;
   body?: unknown;
+  bodyEncoding?: "json" | "form";
   timeoutMs?: number;
   retries?: number;
 };
@@ -129,8 +130,28 @@ export async function kotakFetch(
 
       let body: string | undefined;
       if (options.body !== undefined) {
-        headers["Content-Type"] = "application/json";
-        body = JSON.stringify(options.body);
+        if (options.bodyEncoding === "form") {
+          headers["Content-Type"] = "application/x-www-form-urlencoded";
+          if (options.body instanceof URLSearchParams) {
+            body = options.body.toString();
+          } else if (typeof options.body === "string") {
+            body = options.body;
+          } else if (options.body && typeof options.body === "object") {
+            const params = new URLSearchParams();
+            for (const [key, value] of Object.entries(
+              options.body as Record<string, unknown>,
+            )) {
+              if (value === undefined || value === null) {
+                continue;
+              }
+              params.set(key, typeof value === "string" ? value : String(value));
+            }
+            body = params.toString();
+          }
+        } else {
+          headers["Content-Type"] = "application/json";
+          body = JSON.stringify(options.body);
+        }
       }
 
       const response = await fetch(url, {

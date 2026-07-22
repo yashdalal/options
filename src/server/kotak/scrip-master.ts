@@ -31,6 +31,8 @@ export type ScripMasterRegistry = {
   asOfDate: string;
   byToken: Map<string, ScripInstrument>;
   cashBySymbol: Map<string, ScripInstrument>;
+  optionUnderlyings: string[];
+  optionsByUnderlying: Map<string, ScripInstrument[]>;
 };
 
 const CACHE_DIR =
@@ -266,9 +268,21 @@ function setPreferredCashSymbol(
   cashBySymbol.set(key, preferCashInstrument(cashBySymbol.get(key), instrument));
 }
 
+function isStockOption(instrument: ScripInstrument): boolean {
+  if (instrument.exchangeSegment !== "nse_fo" || !instrument.optionType) {
+    return false;
+  }
+  if (instrument.strike === null || !instrument.expiryIso) {
+    return false;
+  }
+  const type = instrument.instrumentType.toUpperCase();
+  return type.includes("OPTSTK") || type === "CE" || type === "PE" || type === "";
+}
+
 function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripMasterRegistry {
   const byToken = new Map<string, ScripInstrument>();
   const cashBySymbol = new Map<string, ScripInstrument>();
+  const optionsByUnderlying = new Map<string, ScripInstrument[]>();
 
   for (const instrument of instruments) {
     byToken.set(`${instrument.exchangeSegment}:${instrument.instrumentToken}`, instrument);
@@ -277,9 +291,22 @@ function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripM
       const withoutSuffix = instrument.tradingSymbol.replace(/-EQ$/i, "").toUpperCase();
       setPreferredCashSymbol(cashBySymbol, withoutSuffix, instrument);
     }
+    if (isStockOption(instrument)) {
+      const key = instrument.underlying.toUpperCase();
+      const existing = optionsByUnderlying.get(key);
+      if (existing) {
+        existing.push(instrument);
+      } else {
+        optionsByUnderlying.set(key, [instrument]);
+      }
+    }
   }
 
-  return { asOfDate, byToken, cashBySymbol };
+  const optionUnderlyings = [...optionsByUnderlying.keys()]
+    .filter((symbol) => cashBySymbol.has(symbol))
+    .sort((left, right) => left.localeCompare(right));
+
+  return { asOfDate, byToken, cashBySymbol, optionUnderlyings, optionsByUnderlying };
 }
 
 export function buildScripMasterRegistryFromInstruments(
@@ -383,4 +410,31 @@ export function resolveCashInstrument(
   underlying: string,
 ): ScripInstrument | null {
   return registry.cashBySymbol.get(underlying.toUpperCase()) ?? null;
+}
+
+export function listOptionUnderlyings(registry: ScripMasterRegistry): string[] {
+  return registry.optionUnderlyings;
+}
+
+export function listExpiriesForUnderlying(
+  registry: ScripMasterRegistry,
+  underlying: string,
+): string[] {
+  const options = registry.optionsByUnderlying.get(underlying.toUpperCase()) ?? [];
+  const expiries = new Set<string>();
+  for (const option of options) {
+    if (option.expiryIso) {
+      expiries.add(option.expiryIso);
+    }
+  }
+  return [...expiries].sort();
+}
+
+export function listOptionsForUnderlyingExpiry(
+  registry: ScripMasterRegistry,
+  underlying: string,
+  expiryIso: string,
+): ScripInstrument[] {
+  const options = registry.optionsByUnderlying.get(underlying.toUpperCase()) ?? [];
+  return options.filter((option) => option.expiryIso === expiryIso);
 }

@@ -14,7 +14,18 @@ import {
   shouldHighlightRow,
   shouldHighlightSide,
 } from "@/domain/proximity";
-import { parseScripCsv } from "@/server/kotak/scrip-master";
+import {
+  calculateAnnualizedReturnPct,
+  calculateNetPremium,
+  calculateSpreadPct,
+  selectOtmOptionsNearSpread,
+} from "@/domain/screening";
+import {
+  buildScripMasterRegistryFromInstruments,
+  listExpiriesForUnderlying,
+  listOptionsForUnderlyingExpiry,
+  parseScripCsv,
+} from "@/server/kotak/scrip-master";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { NormalizedPosition } from "@/domain/types";
@@ -37,14 +48,7 @@ function registryFromFixtures() {
     ...parseScripCsv(foCsv, "nse_fo"),
     ...parseScripCsv(cmCsv, "nse_cm"),
   ];
-  const byToken = new Map(instruments.map((item) => [`${item.exchangeSegment}:${item.instrumentToken}`, item]));
-  const cashBySymbol = new Map<string, (typeof instruments)[number]>();
-  for (const instrument of instruments) {
-    if (instrument.exchangeSegment === "nse_cm") {
-      cashBySymbol.set(instrument.underlying.toUpperCase(), instrument);
-    }
-  }
-  return { asOfDate: "2025-07-19", byToken, cashBySymbol };
+  return buildScripMasterRegistryFromInstruments("2025-07-19", instruments);
 }
 
 describe("normalizePositions", () => {
@@ -277,5 +281,79 @@ describe("buildExpiryGroups", () => {
     ]);
     expect(sbinRows[0]?.call?.lots).toBe(-2);
     expect(sbinRows[0]?.put?.lots).toBe(-2);
+  });
+});
+
+describe("screening math", () => {
+  it("computes OTM call and put spreads", () => {
+    expect(calculateSpreadPct("CALL", 1180, 1000)).toBeCloseTo(18);
+    expect(calculateSpreadPct("PUT", 820, 1000)).toBeCloseTo(18);
+    expect(calculateSpreadPct("CALL", 900, 1000)).toBeNull();
+    expect(calculateSpreadPct("PUT", 1100, 1000)).toBeNull();
+  });
+
+  it("annualizes net premium against margin over calendar days", () => {
+    const net = calculateNetPremium(10, 100, 1, 50);
+    expect(net).toBe(950);
+    const annualized = calculateAnnualizedReturnPct(net, 50_000, 30);
+    expect(annualized).toBeCloseTo((950 / 50_000) * (365 / 30) * 100);
+  });
+
+  it("prunes OTM strikes near the spread band", () => {
+    const options = [
+      {
+        optionType: "CALL" as const,
+        strike: 1100,
+        lotSize: 50,
+        instrumentToken: "1",
+        exchangeSegment: "nse_fo",
+        tradingSymbol: "X1100CE",
+        expiryIso: "2025-08-28",
+      },
+      {
+        optionType: "CALL" as const,
+        strike: 1180,
+        lotSize: 50,
+        instrumentToken: "2",
+        exchangeSegment: "nse_fo",
+        tradingSymbol: "X1180CE",
+        expiryIso: "2025-08-28",
+      },
+      {
+        optionType: "CALL" as const,
+        strike: 1400,
+        lotSize: 50,
+        instrumentToken: "3",
+        exchangeSegment: "nse_fo",
+        tradingSymbol: "X1400CE",
+        expiryIso: "2025-08-28",
+      },
+      {
+        optionType: "PUT" as const,
+        strike: 820,
+        lotSize: 50,
+        instrumentToken: "4",
+        exchangeSegment: "nse_fo",
+        tradingSymbol: "X820PE",
+        expiryIso: "2025-08-28",
+      },
+    ];
+    const selected = selectOtmOptionsNearSpread({
+      options,
+      spot: 1000,
+      spreadMin: 18,
+      spreadMax: 20,
+      side: "BOTH",
+    });
+    expect(selected.map((item) => item.instrumentToken).sort()).toEqual(["2", "4"]);
+  });
+
+  it("indexes option underlyings from scrip master", () => {
+    const registry = registryFromFixtures();
+    expect(registry.optionUnderlyings).toContain("SBIN");
+    expect(listExpiriesForUnderlying(registry, "SBIN")).toContain("2025-07-31");
+    expect(listOptionsForUnderlyingExpiry(registry, "SBIN", "2025-07-31").length).toBeGreaterThan(
+      0,
+    );
   });
 });

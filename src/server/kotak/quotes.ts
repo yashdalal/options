@@ -3,6 +3,7 @@ import { kotakFetch } from "./client";
 import { KotakApiError } from "./errors";
 import type { TradeSessionCredentials } from "./auth";
 import { logWarn } from "../logging";
+import { getKotakRateLimiter } from "./rate-limit";
 
 const quoteItemSchema = z
   .object({
@@ -39,6 +40,13 @@ export type InstrumentRef = {
   exchangeSegment: string;
 };
 
+export type InstrumentQuote = {
+  instrumentToken: string;
+  exchangeSegment: string;
+  tradingSymbol?: string;
+  ltp: number | null;
+};
+
 export type SpotQuote = {
   instrumentToken: string;
   exchangeSegment: string;
@@ -57,7 +65,7 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-function resolveSpot(item: z.infer<typeof quoteItemSchema>): number | null {
+function resolveLtp(item: z.infer<typeof quoteItemSchema>): number | null {
   return (
     toNumber(item.ltp) ??
     toNumber(item.last_traded_price) ??
@@ -88,55 +96,68 @@ function toQuoteToken(instrumentToken: string): string {
   return instrumentToken === "26000" ? "Nifty 50" : instrumentToken;
 }
 
-export async function fetchSpotQuotes(
+async function fetchQuoteBatch(
+  session: TradeSessionCredentials,
+  batch: InstrumentRef[],
+): Promise<InstrumentQuote[]> {
+  const requestedByQuoteKey = new Map(
+    batch.map((item) => [
+      `${item.exchangeSegment}:${toQuoteToken(item.instrumentToken)}`,
+      item,
+    ]),
+  );
+  const neoSymbols = batch
+    .map((item) => `${item.exchangeSegment}|${toQuoteToken(item.instrumentToken)}`)
+    .join(",");
+
+  const limiter = getKotakRateLimiter();
+  const payload = await limiter.schedule(() =>
+    kotakFetch(
+      `${session.baseUrl}/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neoSymbols)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: session.accessToken,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      },
+    ),
+  );
+
+  const results: InstrumentQuote[] = [];
+  const items = extractItems(payload);
+  for (const item of items) {
+    const quoteToken = String(
+      item.instrument_token ?? item.exchange_token ?? item.pSymbol ?? "",
+    );
+    const segment = String(item.exchange_segment ?? item.exchange ?? "nse_cm");
+    const requested = requestedByQuoteKey.get(`${segment}:${quoteToken}`);
+    results.push({
+      instrumentToken: requested?.instrumentToken ?? quoteToken,
+      exchangeSegment: segment,
+      tradingSymbol: item.trading_symbol ?? item.display_symbol,
+      ltp: resolveLtp(item),
+    });
+  }
+  return results;
+}
+
+export async function fetchQuotes(
   session: TradeSessionCredentials,
   instruments: InstrumentRef[],
   batchSize = 50,
-): Promise<SpotQuote[]> {
+): Promise<InstrumentQuote[]> {
   const unique = new Map<string, InstrumentRef>();
   for (const item of instruments) {
     unique.set(`${item.exchangeSegment}:${item.instrumentToken}`, item);
   }
 
-  const results: SpotQuote[] = [];
+  const results: InstrumentQuote[] = [];
 
   for (const batch of chunk([...unique.values()], batchSize)) {
     try {
-      const requestedByQuoteKey = new Map(
-        batch.map((item) => [
-          `${item.exchangeSegment}:${toQuoteToken(item.instrumentToken)}`,
-          item,
-        ]),
-      );
-      const neoSymbols = batch
-        .map((item) => `${item.exchangeSegment}|${toQuoteToken(item.instrumentToken)}`)
-        .join(",");
-
-      const payload = await kotakFetch(
-        `${session.baseUrl}/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neoSymbols)}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: session.accessToken,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-        },
-      );
-
-      const items = extractItems(payload);
-      for (const item of items) {
-        const quoteToken = String(
-          item.instrument_token ?? item.exchange_token ?? item.pSymbol ?? "",
-        );
-        const segment = String(item.exchange_segment ?? item.exchange ?? "nse_cm");
-        const requested = requestedByQuoteKey.get(`${segment}:${quoteToken}`);
-        results.push({
-          instrumentToken: requested?.instrumentToken ?? quoteToken,
-          exchangeSegment: segment,
-          tradingSymbol: item.trading_symbol ?? item.display_symbol,
-          spot: resolveSpot(item),
-        });
-      }
+      const batchResults = await fetchQuoteBatch(session, batch);
+      results.push(...batchResults);
     } catch (error) {
       logWarn("Quote batch failed", {
         size: batch.length,
@@ -146,7 +167,7 @@ export async function fetchSpotQuotes(
         results.push({
           instrumentToken: item.instrumentToken,
           exchangeSegment: item.exchangeSegment,
-          spot: null,
+          ltp: null,
         });
       }
     }
@@ -157,4 +178,18 @@ export async function fetchSpotQuotes(
   }
 
   return results;
+}
+
+export async function fetchSpotQuotes(
+  session: TradeSessionCredentials,
+  instruments: InstrumentRef[],
+  batchSize = 50,
+): Promise<SpotQuote[]> {
+  const quotes = await fetchQuotes(session, instruments, batchSize);
+  return quotes.map((quote) => ({
+    instrumentToken: quote.instrumentToken,
+    exchangeSegment: quote.exchangeSegment,
+    tradingSymbol: quote.tradingSymbol,
+    spot: quote.ltp,
+  }));
 }
