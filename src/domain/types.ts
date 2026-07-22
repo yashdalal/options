@@ -66,16 +66,19 @@ export type MonitorSnapshot = {
 export type ScreenSideFilter = "CALL" | "PUT" | "BOTH";
 
 export type ScreenCandidate = {
+  id: string;
   company: string;
   optionType: OptionType;
   strike: number;
   spot: number;
   spreadPct: number;
   priceDiffInr: number;
-  premium: number;
+  premium: number | null;
+  hasBid: boolean;
   lotSize: number;
   lots: number;
-  netPremium: number;
+  fillIndex: number;
+  netPremium: number | null;
   calendarDaysLeft: number;
   expiryIso: string;
   instrumentToken: string;
@@ -87,12 +90,25 @@ export type ScreenCandidate = {
   meetsReturn: boolean | null;
 };
 
+export type ScreenCoverage = {
+  maxPerSide: number;
+  nearBand: number;
+  quoted: number;
+  omittedByCap: number;
+  noBid: number;
+  belowSpreadMin: number;
+  shown: number;
+  meetsSpreadMinWithBid: number;
+};
+
 export type ScreenSnapshot = {
   generatedAt: string;
   company: string;
   expiryIso: string;
   spot: number | null;
   calendarDaysLeft: number | null;
+  workingDaysLeft: number | null;
+  coverage: ScreenCoverage | null;
   candidates: ScreenCandidate[];
 };
 

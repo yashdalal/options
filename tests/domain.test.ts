@@ -15,10 +15,15 @@ import {
   shouldHighlightSide,
 } from "@/domain/proximity";
 import {
+  allocateLotsAcrossBids,
+  buildScreenCandidate,
   calculateAnnualizedReturnPct,
   calculateNetPremium,
+  calculateOptionSellExpenses,
   calculateSpreadPct,
+  calendarDaysLeft,
   selectOtmOptionsNearSpread,
+  workingDaysLeft,
 } from "@/domain/screening";
 import {
   buildScripMasterRegistryFromInstruments,
@@ -292,11 +297,97 @@ describe("screening math", () => {
     expect(calculateSpreadPct("PUT", 1100, 1000)).toBeNull();
   });
 
-  it("annualizes net premium against margin over calendar days", () => {
-    const net = calculateNetPremium(10, 100, 1, 50);
-    expect(net).toBe(950);
+  it("counts calendar and weekday days to expiry in IST", () => {
+    const now = new Date("2026-07-22T10:00:00+05:30");
+    expect(calendarDaysLeft("2026-07-28", now)).toBe(6);
+    expect(workingDaysLeft("2026-07-28", now)).toBe(4);
+    expect(calendarDaysLeft("2026-07-22", now)).toBe(1);
+    expect(workingDaysLeft("2026-07-22", now)).toBe(1);
+  });
+
+  it("deducts Kotak sell-side charges from premium turnover", () => {
+    expect(calculateOptionSellExpenses(0, 100, 1)).toBe(0);
+    expect(calculateOptionSellExpenses(10, 100, 1)).toBeCloseTo(13.714534, 5);
+    expect(calculateNetPremium(10, 100, 1)).toBeCloseTo(986.285466, 5);
+
+    expect(calculateOptionSellExpenses(10, 100, 2)).toBeCloseTo(15.629068, 5);
+    expect(calculateOptionSellExpenses(10, 100, 2)).toBeGreaterThan(
+      calculateOptionSellExpenses(10, 100, 1),
+    );
+
+    const net = calculateNetPremium(10, 100, 1);
     const annualized = calculateAnnualizedReturnPct(net, 50_000, 30);
-    expect(annualized).toBeCloseTo((950 / 50_000) * (365 / 30) * 100);
+    expect(annualized).toBeCloseTo((net / 50_000) * (365 / 30) * 100);
+  });
+
+  it("builds screen candidates with dynamic expenses and min spread only", () => {
+    const option = {
+      optionType: "CALL" as const,
+      strike: 1180,
+      lotSize: 100,
+      instrumentToken: "tok-1",
+      exchangeSegment: "nse_fo",
+      tradingSymbol: "X1180CE",
+      expiryIso: "2026-08-28",
+    };
+    const withBid = buildScreenCandidate({
+      company: "X",
+      option,
+      spot: 1000,
+      premium: 10,
+      lots: 1,
+      daysLeft: 30,
+      spreadMin: 18,
+      returnMin: 20,
+      margin: 50_000,
+    });
+    expect(withBid.id).toBe("tok-1:0");
+    expect(withBid.hasBid).toBe(true);
+    expect(withBid.meetsSpread).toBe(true);
+    expect(withBid.netPremium).toBeCloseTo(986.285466, 5);
+    expect(withBid.annualizedReturnPct).toBeCloseTo(
+      (986.285466 / 50_000) * (365 / 30) * 100,
+      4,
+    );
+    expect(withBid.meetsReturn).toBe(true);
+
+    const noBid = buildScreenCandidate({
+      company: "X",
+      option,
+      spot: 1000,
+      premium: null,
+      lots: 1,
+      daysLeft: 30,
+      spreadMin: 18,
+      returnMin: 24,
+      fillIndex: 2,
+    });
+    expect(noBid.id).toBe("tok-1:2");
+    expect(noBid.hasBid).toBe(false);
+    expect(noBid.netPremium).toBeNull();
+    expect(noBid.meetsReturn).toBeNull();
+  });
+
+  it("splits requested lots across bid depth levels", () => {
+    expect(
+      allocateLotsAcrossBids(
+        [
+          { price: 0.03, quantity: 35 * 31_100 },
+          { price: 0.02, quantity: 51 * 31_100 },
+        ],
+        31_100,
+        40,
+      ),
+    ).toEqual([
+      { premium: 0.03, lots: 35 },
+      { premium: 0.02, lots: 5 },
+    ]);
+    expect(
+      allocateLotsAcrossBids([{ price: 0.03, quantity: 255 * 31_100 }], 31_100, 40),
+    ).toEqual([{ premium: 0.03, lots: 40 }]);
+    expect(allocateLotsAcrossBids([{ price: 0.03, quantity: 10_000 }], 31_100, 40)).toEqual(
+      [],
+    );
   });
 
   it("prunes OTM strikes near the spread band", () => {
@@ -342,10 +433,12 @@ describe("screening math", () => {
       options,
       spot: 1000,
       spreadMin: 18,
-      spreadMax: 20,
       side: "BOTH",
     });
-    expect(selected.map((item) => item.instrumentToken).sort()).toEqual(["2", "4"]);
+    expect(selected.options.map((item) => item.instrumentToken).sort()).toEqual(["1", "2", "3", "4"]);
+    expect(selected.maxPerSide).toBe(50);
+    expect(selected.nearBandCalls).toBe(3);
+    expect(selected.nearBandPuts).toBe(1);
   });
 
   it("indexes option underlyings from scrip master", () => {

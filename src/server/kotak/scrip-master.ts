@@ -80,6 +80,16 @@ function normalizeHeader(value: string): string {
   return value.replace(/;/g, "").trim().toLowerCase();
 }
 
+const KOTAK_EPOCH_MS = Date.UTC(1980, 0, 1);
+
+function formatUtcDate(ms: number): string {
+  const date = new Date(ms);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function parseExpiry(value: string | undefined): string | null {
   if (!value || value === "-" || value === "NA") {
     return null;
@@ -134,7 +144,24 @@ function parseExpiry(value: string | undefined): string | null {
     }
   }
 
+  // Kotak Neo masters use seconds since 1980-01-01 in lExpiryDate/pExpiryDate.
+  if (/^\d+(\.\d+)?$/.test(value.trim())) {
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return formatUtcDate(KOTAK_EPOCH_MS + seconds * 1000);
+    }
+  }
+
   return null;
+}
+
+function parseStrike(value: string | undefined): number | null {
+  const parsed = toNumber(value);
+  if (parsed === null) {
+    return null;
+  }
+  // Kotak Neo dStrikePrice is strike * 100 (paise).
+  return parsed / 100;
 }
 
 function parseOptionType(value: string | undefined): "CALL" | "PUT" | null {
@@ -197,12 +224,20 @@ export function parseScripCsv(
   ]);
   const typeIdx = index([
     "pinstrumenttype",
+    "pinsttype",
+    "pinstname",
     "instrumenttype",
     "instrument_type",
   ]);
   const optionIdx = index(["poptiontype", "optiontype", "option_type", "opttype"]);
   const strikeIdx = index(["dstrikeprice", "dstrikeprice;", "strikeprice", "strike"]);
-  const expiryIdx = index(["dexpirydate", "expirydate", "expiry"]);
+  const expiryIdx = index([
+    "dexpirydate",
+    "lexpirydate",
+    "pexpirydate",
+    "expirydate",
+    "expiry",
+  ]);
   const lotIdx = index(["llotsize", "lotsize", "lot_size"]);
   const multiplierIdx = index(["lmultiplier", "multiplier"]);
 
@@ -228,7 +263,7 @@ export function parseScripCsv(
       underlying: (underlyingIdx >= 0 ? cells[underlyingIdx] : tradingSymbol.split("-")[0]) || tradingSymbol,
       instrumentType,
       optionType,
-      strike: toNumber(strikeIdx >= 0 ? cells[strikeIdx] : undefined),
+      strike: parseStrike(strikeIdx >= 0 ? cells[strikeIdx] : undefined),
       expiryIso: parseExpiry(expiryIdx >= 0 ? cells[expiryIdx] : undefined),
       lotSize: toNumber(lotIdx >= 0 ? cells[lotIdx] : undefined) ?? 1,
       multiplier: toNumber(multiplierIdx >= 0 ? cells[multiplierIdx] : undefined) ?? 1,

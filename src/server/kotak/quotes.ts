@@ -5,6 +5,14 @@ import type { TradeSessionCredentials } from "./auth";
 import { logWarn } from "../logging";
 import { getKotakRateLimiter } from "./rate-limit";
 
+const depthLevelSchema = z
+  .object({
+    price: z.union([z.string(), z.number()]).optional(),
+    quantity: z.union([z.string(), z.number()]).optional(),
+    orders: z.union([z.string(), z.number()]).optional(),
+  })
+  .passthrough();
+
 const quoteItemSchema = z
   .object({
     instrument_token: z.union([z.string(), z.number()]).optional(),
@@ -16,12 +24,20 @@ const quoteItemSchema = z
     display_symbol: z.string().optional(),
     last_traded_price: z.union([z.string(), z.number()]).optional(),
     ltp: z.union([z.string(), z.number()]).optional(),
+    buy_price: z.union([z.string(), z.number()]).optional(),
+    sell_price: z.union([z.string(), z.number()]).optional(),
     ohlc: z
       .object({
         open: z.union([z.string(), z.number()]).optional(),
         high: z.union([z.string(), z.number()]).optional(),
         low: z.union([z.string(), z.number()]).optional(),
         close: z.union([z.string(), z.number()]).optional(),
+      })
+      .optional(),
+    depth: z
+      .object({
+        buy: z.array(depthLevelSchema).optional(),
+        sell: z.array(depthLevelSchema).optional(),
       })
       .optional(),
   })
@@ -40,11 +56,20 @@ export type InstrumentRef = {
   exchangeSegment: string;
 };
 
+export type QuoteDepthLevel = {
+  price: number;
+  quantity: number;
+  orders: number;
+};
+
 export type InstrumentQuote = {
   instrumentToken: string;
   exchangeSegment: string;
   tradingSymbol?: string;
   ltp: number | null;
+  bestBid: number | null;
+  bestAsk: number | null;
+  buyDepth: QuoteDepthLevel[];
 };
 
 export type SpotQuote = {
@@ -65,12 +90,57 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
+function firstPositiveDepthPrice(
+  levels: z.infer<typeof depthLevelSchema>[] | undefined,
+): number | null {
+  if (!levels) {
+    return null;
+  }
+  for (const level of levels) {
+    const price = toNumber(level.price);
+    if (price !== null && price > 0) {
+      return price;
+    }
+  }
+  return null;
+}
+
+export function parseBuyDepth(
+  levels: z.infer<typeof depthLevelSchema>[] | undefined,
+): QuoteDepthLevel[] {
+  if (!levels) {
+    return [];
+  }
+  const parsed: QuoteDepthLevel[] = [];
+  for (const level of levels) {
+    const price = toNumber(level.price);
+    const quantity = toNumber(level.quantity);
+    if (price === null || !(price > 0) || quantity === null || !(quantity > 0)) {
+      continue;
+    }
+    parsed.push({
+      price,
+      quantity,
+      orders: toNumber(level.orders) ?? 0,
+    });
+  }
+  return parsed;
+}
+
 function resolveLtp(item: z.infer<typeof quoteItemSchema>): number | null {
   return (
     toNumber(item.ltp) ??
     toNumber(item.last_traded_price) ??
     toNumber(item.ohlc?.close)
   );
+}
+
+export function resolveBestBid(item: z.infer<typeof quoteItemSchema>): number | null {
+  return firstPositiveDepthPrice(item.depth?.buy) ?? toNumber(item.buy_price);
+}
+
+export function resolveBestAsk(item: z.infer<typeof quoteItemSchema>): number | null {
+  return firstPositiveDepthPrice(item.depth?.sell) ?? toNumber(item.sell_price);
 }
 
 function extractItems(payload: unknown): z.infer<typeof quoteItemSchema>[] {
@@ -137,6 +207,9 @@ async function fetchQuoteBatch(
       exchangeSegment: segment,
       tradingSymbol: item.trading_symbol ?? item.display_symbol,
       ltp: resolveLtp(item),
+      bestBid: resolveBestBid(item),
+      bestAsk: resolveBestAsk(item),
+      buyDepth: parseBuyDepth(item.depth?.buy),
     });
   }
   return results;
@@ -168,6 +241,9 @@ export async function fetchQuotes(
           instrumentToken: item.instrumentToken,
           exchangeSegment: item.exchangeSegment,
           ltp: null,
+          bestBid: null,
+          bestAsk: null,
+          buyDepth: [],
         });
       }
     }

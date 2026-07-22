@@ -13,6 +13,7 @@ const bodySchema = z.object({
   items: z
     .array(
       z.object({
+        id: z.string().optional(),
         instrumentToken: z.string().min(1),
         exchangeSegment: z.string().optional(),
         tradingSymbol: z.string().optional(),
@@ -20,7 +21,7 @@ const bodySchema = z.object({
         quantity: z.number().int().positive(),
       }),
     )
-    .max(20),
+    .max(40),
 });
 
 function errorResponse(error: unknown, requestId: string, fallback: string): Response {

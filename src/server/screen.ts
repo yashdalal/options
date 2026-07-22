@@ -1,8 +1,10 @@
 import { ACCOUNT_DEFINITIONS, type AccountId, isAccountId } from "@/config/accounts";
 import {
+  allocateLotsAcrossBids,
   buildScreenCandidate,
   calendarDaysLeft,
   selectOtmOptionsNearSpread,
+  workingDaysLeft,
   type ScreenableOption,
 } from "@/domain/screening";
 import type { ScreenCandidate, ScreenMeta, ScreenSideFilter, ScreenSnapshot } from "@/domain/types";
@@ -23,14 +25,13 @@ export type ScreenQuery = {
   symbol: string;
   expiryIso: string;
   spreadMin: number;
-  spreadMax: number;
   returnMin: number;
   side: ScreenSideFilter;
   lots: number;
-  expenses: number;
 };
 
 export type MarginRequestItem = {
+  id?: string;
   instrumentToken: string;
   exchangeSegment?: string;
   tradingSymbol?: string;
@@ -109,6 +110,8 @@ export async function getScreenSnapshot(
       expiryIso: query.expiryIso,
       spot: null,
       calendarDaysLeft: null,
+      workingDaysLeft: null,
+      coverage: null,
       candidates: [],
     };
   }
@@ -117,6 +120,7 @@ export async function getScreenSnapshot(
     listOptionsForUnderlyingExpiry(registry, company, query.expiryIso),
   );
   const daysLeft = calendarDaysLeft(query.expiryIso);
+  const tradingDaysLeft = workingDaysLeft(query.expiryIso);
 
   let spot: number | null = null;
   try {
@@ -138,17 +142,22 @@ export async function getScreenSnapshot(
       expiryIso: query.expiryIso,
       spot: null,
       calendarDaysLeft: daysLeft,
+      workingDaysLeft: tradingDaysLeft,
+      coverage: null,
       candidates: [],
     };
   }
 
-  const selected = selectOtmOptionsNearSpread({
+  const selection = selectOtmOptionsNearSpread({
     options,
     spot,
     spreadMin: query.spreadMin,
-    spreadMax: query.spreadMax,
     side: query.side,
   });
+  const selected = selection.options;
+  const nearBand = selection.nearBandCalls + selection.nearBandPuts;
+  const quoted = selected.length;
+  const omittedByCap = Math.max(0, nearBand - quoted);
 
   const optionQuotes = selected.length
     ? await fetchQuotes(
@@ -159,34 +168,56 @@ export async function getScreenSnapshot(
         })),
       )
     : [];
-  const premiumByToken = new Map(
+  const quoteByToken = new Map(
     optionQuotes.map((quote) => [
       `${quote.exchangeSegment}:${quote.instrumentToken}`,
-      quote.ltp,
+      quote,
     ]),
   );
 
   const candidates: ScreenCandidate[] = [];
+  let noBid = 0;
+  let belowSpreadMin = 0;
+  let meetsSpreadMinWithBid = 0;
   for (const option of selected) {
-    const premium =
-      premiumByToken.get(`${option.exchangeSegment}:${option.instrumentToken}`) ?? null;
-    if (premium === null || !(premium > 0)) {
+    const quote = quoteByToken.get(`${option.exchangeSegment}:${option.instrumentToken}`);
+    const depthFills = quote
+      ? allocateLotsAcrossBids(quote.buyDepth, option.lotSize, query.lots)
+      : [];
+    const fills =
+      depthFills.length > 0
+        ? depthFills
+        : quote?.bestBid && quote.bestBid > 0
+          ? [{ premium: quote.bestBid, lots: query.lots }]
+          : [];
+    if (fills.length === 0) {
+      noBid += 1;
       continue;
     }
-    const candidate = buildScreenCandidate({
-      company,
-      option,
-      spot,
-      premium,
-      lots: query.lots,
-      expenses: query.expenses,
-      daysLeft,
-      spreadMin: query.spreadMin,
-      spreadMax: query.spreadMax,
-      returnMin: query.returnMin,
-    });
-    if (candidate.meetsSpread) {
+
+    let instrumentMetSpread = false;
+    for (const [fillIndex, fill] of fills.entries()) {
+      const candidate = buildScreenCandidate({
+        company,
+        option,
+        spot,
+        premium: fill.premium,
+        lots: fill.lots,
+        daysLeft,
+        spreadMin: query.spreadMin,
+        returnMin: query.returnMin,
+        fillIndex,
+      });
+      if (!candidate.meetsSpread) {
+        continue;
+      }
+      instrumentMetSpread = true;
       candidates.push(candidate);
+    }
+    if (instrumentMetSpread) {
+      meetsSpreadMinWithBid += 1;
+    } else {
+      belowSpreadMin += 1;
     }
   }
 
@@ -194,7 +225,10 @@ export async function getScreenSnapshot(
     if (left.optionType !== right.optionType) {
       return left.optionType.localeCompare(right.optionType);
     }
-    return left.strike - right.strike;
+    if (left.strike !== right.strike) {
+      return left.strike - right.strike;
+    }
+    return left.fillIndex - right.fillIndex;
   });
 
   return {
@@ -203,6 +237,17 @@ export async function getScreenSnapshot(
     expiryIso: query.expiryIso,
     spot,
     calendarDaysLeft: daysLeft,
+    workingDaysLeft: tradingDaysLeft,
+    coverage: {
+      maxPerSide: selection.maxPerSide,
+      nearBand,
+      quoted,
+      omittedByCap,
+      noBid,
+      belowSpreadMin,
+      shown: candidates.length,
+      meetsSpreadMinWithBid,
+    },
     candidates,
   };
 }
@@ -212,7 +257,7 @@ export async function getScreenMargins(
   items: MarginRequestItem[],
   accountId: string | undefined,
   requestId: string,
-): Promise<{ instrumentToken: string; margin: number | null; error?: string }[]> {
+): Promise<{ id?: string; instrumentToken: string; margin: number | null; error?: string }[]> {
   const { accountId: resolvedAccountId, session } = resolveAccountSession(
     sessions,
     accountId,
@@ -223,7 +268,12 @@ export async function getScreenMargins(
     count: items.length,
   });
 
-  const results: { instrumentToken: string; margin: number | null; error?: string }[] = [];
+  const results: {
+    id?: string;
+    instrumentToken: string;
+    margin: number | null;
+    error?: string;
+  }[] = [];
   for (const item of items) {
     try {
       const margin = await checkMargin(session, {
@@ -237,6 +287,7 @@ export async function getScreenMargins(
         orderType: "L",
       });
       results.push({
+        id: item.id,
         instrumentToken: item.instrumentToken,
         margin: margin.totalMarginUsed,
       });
@@ -250,6 +301,7 @@ export async function getScreenMargins(
         handleBrokerAuthFailure(resolvedAccountId, error);
       }
       results.push({
+        id: item.id,
         instrumentToken: item.instrumentToken,
         margin: null,
         error: error instanceof Error ? error.message : "margin_failed",

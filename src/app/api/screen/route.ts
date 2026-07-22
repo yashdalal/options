@@ -81,11 +81,9 @@ export async function GET(request: Request): Promise<Response> {
         symbol,
         expiryIso,
         spreadMin: parseNumber(url.searchParams.get("spreadMin"), 18),
-        spreadMax: parseNumber(url.searchParams.get("spreadMax"), 20),
         returnMin: parseNumber(url.searchParams.get("returnMin"), 24),
         side: parseSide(url.searchParams.get("side")),
         lots: Math.max(1, Math.floor(parseNumber(url.searchParams.get("lots"), 1))),
-        expenses: Math.max(0, parseNumber(url.searchParams.get("expenses"), 0)),
       },
       requestId,
     );

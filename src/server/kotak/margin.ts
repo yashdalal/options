@@ -61,12 +61,13 @@ function resolveTotalMargin(payload: unknown): number | null {
     return null;
   }
   const data = parsed.data.data ?? parsed.data;
-  return (
-    toNumber(data.totMrgnUsd) ??
-    toNumber(data.mrgnUsd) ??
-    toNumber(data.ordMrgn) ??
-    toNumber(data.reqdMrgn)
-  );
+  const candidates = [
+    toNumber(data.ordMrgn),
+    toNumber(data.reqdMrgn),
+    toNumber(data.totMrgnUsd),
+    toNumber(data.mrgnUsd),
+  ];
+  return candidates.find((value) => value !== null && value > 0) ?? null;
 }
 
 export async function checkMargin(
@@ -104,7 +105,7 @@ export async function checkMargin(
     const totalMarginUsed = resolveTotalMargin(payload);
     if (totalMarginUsed === null) {
       throw new KotakApiError(
-        "Margin response missing totMrgnUsd",
+        "Margin response missing ordMrgn",
         500,
         "invalid_response",
         payload,

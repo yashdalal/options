@@ -47,7 +47,9 @@ Use full quotes (not `/ohlc`). Prefer `ltp` / `last_traded_price` for Spot.
 
 ## Option premiums
 
-There is no dedicated option-chain endpoint. Build the chain from the daily `nse_fo` scrip master (`OPTSTK` rows with strike, expiry, lot size, CE/PE), then quote `nse_fo|{instrumentToken}` for premium LTP.
+There is no dedicated option-chain endpoint. Build the chain from the daily `nse_fo` scrip master (`OPTSTK` rows with strike, expiry, lot size, CE/PE), then quote `nse_fo|{instrumentToken}`.
+
+For sell-side screener premium, walk `depth.buy` levels with price > 0. Available lots at a level are `floor(quantity / lotSize)` (not the ORDERS count). When requested lots exceed liquidity at the best bid, the screener emits one candidate row per fill price. Fall back to `buy_price` as a single fill only when depth has no usable quantity. Do not use LTP for executable sell premium — deep OTM options often show a stale tick with an empty buy book.
 
 ## Check margin (sell options)
 
@@ -57,7 +59,7 @@ There is no dedicated option-chain endpoint. Build the chain from the daily `nse
 jData={"brkName":"KOTAK","brnchId":"ONLINE","exSeg":"nse_fo","prc":"<premium>","prcTp":"L","prod":"NRML","qty":"<lotSize*lots>","tok":"<instrumentToken>","trnsTp":"S"}
 ```
 
-Prefer response `data.totMrgnUsd` as total margin used (fallbacks: `mrgnUsd`, `ordMrgn`). One instrument per request. Expect `429` under load; the app shares an ~8 req/s limiter across quotes and margin.
+Prefer response `ordMrgn` as incremental margin for the checked order (fallbacks: `reqdMrgn`, then `totMrgnUsd` / `mrgnUsd`). `totMrgnUsd` is account-level total including existing positions, so it is too high for screener return math. One instrument per request. Expect `429` under load; the app shares an ~8 req/s limiter across quotes and margin.
 
 ## Positions quantity
 
@@ -80,7 +82,7 @@ Kotak may return `stat: Not_Ok`, `stCode: 5203`, `errMsg: "No Data"` when an acc
 - Whether option `optTp` arrives as `CE`/`PE` or `CALL`/`PUT`
 - Token stability across scrip-master regenerations
 - Whether positions payloads include a usable account id field (`actId`) in addition to our local tagging
-- Whether `totMrgnUsd` is always populated for short option NRML checks
+- Whether `ordMrgn` is always populated for short option NRML checks
 
 ## Fixture source
 
