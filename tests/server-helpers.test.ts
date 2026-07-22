@@ -3,9 +3,12 @@ import { assertApprovedBaseUrl } from "@/server/kotak/client";
 import { detectBrokerFailure } from "@/server/kotak/broker-response";
 import {
   buildScripMasterRegistryFromInstruments,
+  listExpiriesForUnderlying,
+  listOptionUnderlyings,
   parseScripCsv,
   resolveCashInstrument,
 } from "@/server/kotak/scrip-master";
+import { parseBuyDepth, resolveBestAsk, resolveBestBid } from "@/server/kotak/quotes";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { redactValue } from "@/server/logging";
@@ -106,7 +109,83 @@ describe("scrip csv parsing", () => {
       "nse_cm",
     );
     expect(fo.find((item) => item.instrumentToken === "12345")?.optionType).toBe("CALL");
+    expect(fo.find((item) => item.instrumentToken === "12345")?.strike).toBe(900);
+    expect(fo.find((item) => item.instrumentToken === "12345")?.expiryIso).toBe("2025-07-31");
     expect(cm.find((item) => item.underlying === "SBIN")?.exchangeSegment).toBe("nse_cm");
+  });
+
+  it("parses Kotak Neo FO headers with epoch expiry and paise strikes", () => {
+    const csv = `pSymbol,pGroup,pExchSeg,pInstType,pSymbolName,pTrdSymbol,pOptionType,dStrikePrice;,lLotSize,lExpiryDate ,lMultiplier
+107305,XX,nse_fo,OPTSTK,GRASIM,GRASIM26AUG3740PE,PE,374000,250,1472135400,-1
+107309,XX,nse_fo,OPTSTK,GRASIM,GRASIM26AUG3820PE,PE,382000,250,1472135400,-1`;
+
+    const fo = parseScripCsv(csv, "nse_fo");
+    expect(fo).toHaveLength(2);
+    expect(fo[0]?.underlying).toBe("GRASIM");
+    expect(fo[0]?.strike).toBe(3740);
+    expect(fo[0]?.expiryIso).toBe("2026-08-25");
+    expect(fo[0]?.optionType).toBe("PUT");
+    expect(fo[0]?.instrumentType).toBe("OPTSTK");
+
+    const registry = buildScripMasterRegistryFromInstruments("2026-07-22", [
+      ...fo,
+      ...parseScripCsv(
+        `pSymbol,pTrdSymbol,pSymBl,pInstrumentType
+123,GRASIM-EQ,GRASIM,EQ`,
+        "nse_cm",
+      ),
+    ]);
+    expect(listOptionUnderlyings(registry)).toEqual(["GRASIM"]);
+    expect(listExpiriesForUnderlying(registry, "GRASIM")).toEqual(["2026-08-25"]);
+  });
+});
+
+describe("quote bid/ask resolution", () => {
+  it("reads best bid/ask from depth and skips empty levels", () => {
+    expect(
+      resolveBestBid({
+        depth: {
+          buy: [
+            { price: "0.0000", quantity: "0" },
+            { price: "1.2500", quantity: "1500" },
+          ],
+          sell: [{ price: "1.4000", quantity: "800" }],
+        },
+      }),
+    ).toBe(1.25);
+    expect(
+      resolveBestAsk({
+        depth: {
+          buy: [{ price: "1.2500", quantity: "1500" }],
+          sell: [
+            { price: "0", quantity: "0" },
+            { price: "1.4000", quantity: "800" },
+          ],
+        },
+      }),
+    ).toBe(1.4);
+    expect(
+      resolveBestBid({
+        depth: {
+          buy: [{ price: "0", quantity: "0" }],
+        },
+        buy_price: "0.85",
+      }),
+    ).toBe(0.85);
+    expect(resolveBestBid({ depth: { buy: [{ price: "0", quantity: "0" }] } })).toBeNull();
+  });
+
+  it("parses buy depth quantities used for lot allocation", () => {
+    expect(
+      parseBuyDepth([
+        { price: "0", quantity: "0", orders: "0" },
+        { price: "0.03", quantity: "7930500", orders: "35" },
+        { price: "0.02", quantity: "19375300", orders: "51" },
+      ]),
+    ).toEqual([
+      { price: 0.03, quantity: 7_930_500, orders: 35 },
+      { price: 0.02, quantity: 19_375_300, orders: 51 },
+    ]);
   });
 });
 

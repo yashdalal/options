@@ -62,3 +62,57 @@ export type MonitorSnapshot = {
   accountSummaries: AccountPositionSummary[];
   groups: ExpiryGroup[];
 };
+
+export type ScreenSideFilter = "CALL" | "PUT" | "BOTH";
+
+export type ScreenCandidate = {
+  id: string;
+  company: string;
+  optionType: OptionType;
+  strike: number;
+  spot: number;
+  spreadPct: number;
+  priceDiffInr: number;
+  premium: number | null;
+  hasBid: boolean;
+  lotSize: number;
+  lots: number;
+  fillIndex: number;
+  netPremium: number | null;
+  calendarDaysLeft: number;
+  expiryIso: string;
+  instrumentToken: string;
+  exchangeSegment: string;
+  tradingSymbol: string;
+  margin: number | null;
+  annualizedReturnPct: number | null;
+  meetsSpread: boolean;
+  meetsReturn: boolean | null;
+};
+
+export type ScreenCoverage = {
+  maxPerSide: number;
+  nearBand: number;
+  quoted: number;
+  omittedByCap: number;
+  noBid: number;
+  belowSpreadMin: number;
+  shown: number;
+  meetsSpreadMinWithBid: number;
+};
+
+export type ScreenSnapshot = {
+  generatedAt: string;
+  company: string;
+  expiryIso: string;
+  spot: number | null;
+  calendarDaysLeft: number | null;
+  workingDaysLeft: number | null;
+  coverage: ScreenCoverage | null;
+  candidates: ScreenCandidate[];
+};
+
+export type ScreenMeta = {
+  underlyings: string[];
+  expiriesByUnderlying: Record<string, string[]>;
+};

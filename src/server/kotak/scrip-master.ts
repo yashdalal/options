@@ -31,6 +31,8 @@ export type ScripMasterRegistry = {
   asOfDate: string;
   byToken: Map<string, ScripInstrument>;
   cashBySymbol: Map<string, ScripInstrument>;
+  optionUnderlyings: string[];
+  optionsByUnderlying: Map<string, ScripInstrument[]>;
 };
 
 const CACHE_DIR =
@@ -76,6 +78,16 @@ function parseCsvLine(line: string): string[] {
 
 function normalizeHeader(value: string): string {
   return value.replace(/;/g, "").trim().toLowerCase();
+}
+
+const KOTAK_EPOCH_MS = Date.UTC(1980, 0, 1);
+
+function formatUtcDate(ms: number): string {
+  const date = new Date(ms);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function parseExpiry(value: string | undefined): string | null {
@@ -132,7 +144,24 @@ function parseExpiry(value: string | undefined): string | null {
     }
   }
 
+  // Kotak Neo masters use seconds since 1980-01-01 in lExpiryDate/pExpiryDate.
+  if (/^\d+(\.\d+)?$/.test(value.trim())) {
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return formatUtcDate(KOTAK_EPOCH_MS + seconds * 1000);
+    }
+  }
+
   return null;
+}
+
+function parseStrike(value: string | undefined): number | null {
+  const parsed = toNumber(value);
+  if (parsed === null) {
+    return null;
+  }
+  // Kotak Neo dStrikePrice is strike * 100 (paise).
+  return parsed / 100;
 }
 
 function parseOptionType(value: string | undefined): "CALL" | "PUT" | null {
@@ -195,12 +224,20 @@ export function parseScripCsv(
   ]);
   const typeIdx = index([
     "pinstrumenttype",
+    "pinsttype",
+    "pinstname",
     "instrumenttype",
     "instrument_type",
   ]);
   const optionIdx = index(["poptiontype", "optiontype", "option_type", "opttype"]);
   const strikeIdx = index(["dstrikeprice", "dstrikeprice;", "strikeprice", "strike"]);
-  const expiryIdx = index(["dexpirydate", "expirydate", "expiry"]);
+  const expiryIdx = index([
+    "dexpirydate",
+    "lexpirydate",
+    "pexpirydate",
+    "expirydate",
+    "expiry",
+  ]);
   const lotIdx = index(["llotsize", "lotsize", "lot_size"]);
   const multiplierIdx = index(["lmultiplier", "multiplier"]);
 
@@ -226,7 +263,7 @@ export function parseScripCsv(
       underlying: (underlyingIdx >= 0 ? cells[underlyingIdx] : tradingSymbol.split("-")[0]) || tradingSymbol,
       instrumentType,
       optionType,
-      strike: toNumber(strikeIdx >= 0 ? cells[strikeIdx] : undefined),
+      strike: parseStrike(strikeIdx >= 0 ? cells[strikeIdx] : undefined),
       expiryIso: parseExpiry(expiryIdx >= 0 ? cells[expiryIdx] : undefined),
       lotSize: toNumber(lotIdx >= 0 ? cells[lotIdx] : undefined) ?? 1,
       multiplier: toNumber(multiplierIdx >= 0 ? cells[multiplierIdx] : undefined) ?? 1,
@@ -266,9 +303,21 @@ function setPreferredCashSymbol(
   cashBySymbol.set(key, preferCashInstrument(cashBySymbol.get(key), instrument));
 }
 
+function isStockOption(instrument: ScripInstrument): boolean {
+  if (instrument.exchangeSegment !== "nse_fo" || !instrument.optionType) {
+    return false;
+  }
+  if (instrument.strike === null || !instrument.expiryIso) {
+    return false;
+  }
+  const type = instrument.instrumentType.toUpperCase();
+  return type.includes("OPTSTK") || type === "CE" || type === "PE" || type === "";
+}
+
 function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripMasterRegistry {
   const byToken = new Map<string, ScripInstrument>();
   const cashBySymbol = new Map<string, ScripInstrument>();
+  const optionsByUnderlying = new Map<string, ScripInstrument[]>();
 
   for (const instrument of instruments) {
     byToken.set(`${instrument.exchangeSegment}:${instrument.instrumentToken}`, instrument);
@@ -277,9 +326,22 @@ function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripM
       const withoutSuffix = instrument.tradingSymbol.replace(/-EQ$/i, "").toUpperCase();
       setPreferredCashSymbol(cashBySymbol, withoutSuffix, instrument);
     }
+    if (isStockOption(instrument)) {
+      const key = instrument.underlying.toUpperCase();
+      const existing = optionsByUnderlying.get(key);
+      if (existing) {
+        existing.push(instrument);
+      } else {
+        optionsByUnderlying.set(key, [instrument]);
+      }
+    }
   }
 
-  return { asOfDate, byToken, cashBySymbol };
+  const optionUnderlyings = [...optionsByUnderlying.keys()]
+    .filter((symbol) => cashBySymbol.has(symbol))
+    .sort((left, right) => left.localeCompare(right));
+
+  return { asOfDate, byToken, cashBySymbol, optionUnderlyings, optionsByUnderlying };
 }
 
 export function buildScripMasterRegistryFromInstruments(
@@ -383,4 +445,31 @@ export function resolveCashInstrument(
   underlying: string,
 ): ScripInstrument | null {
   return registry.cashBySymbol.get(underlying.toUpperCase()) ?? null;
+}
+
+export function listOptionUnderlyings(registry: ScripMasterRegistry): string[] {
+  return registry.optionUnderlyings;
+}
+
+export function listExpiriesForUnderlying(
+  registry: ScripMasterRegistry,
+  underlying: string,
+): string[] {
+  const options = registry.optionsByUnderlying.get(underlying.toUpperCase()) ?? [];
+  const expiries = new Set<string>();
+  for (const option of options) {
+    if (option.expiryIso) {
+      expiries.add(option.expiryIso);
+    }
+  }
+  return [...expiries].sort();
+}
+
+export function listOptionsForUnderlyingExpiry(
+  registry: ScripMasterRegistry,
+  underlying: string,
+  expiryIso: string,
+): ScripInstrument[] {
+  const options = registry.optionsByUnderlying.get(underlying.toUpperCase()) ?? [];
+  return options.filter((option) => option.expiryIso === expiryIso);
 }

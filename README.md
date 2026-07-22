@@ -12,6 +12,7 @@ Local-first Next.js dashboard that monitors open NSE option positions from three
 - Groups by expiry and company; combines same-strike calls/puts across accounts into one row (expand for per-account legs)
 - Editable highlight threshold stored in browser local storage
 - Manual refresh plus optional 60-second auto refresh
+- **Screener tab:** pick one F&O company + expiry, filter short CE/PE by min OTM spread, deduct Kotak sell charges automatically, then lazy-load check-margin for annualized return
 
 ## Prerequisites
 
