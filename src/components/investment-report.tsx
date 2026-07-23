@@ -22,6 +22,7 @@ import { useScreenerSettings } from "@/hooks/use-screener-settings";
 import {
   companiesForExpiry,
   filterCompanyChoices,
+  listExpiriesForSelection,
   listUniqueExpiries,
   runPool,
   screenCompany,
@@ -155,10 +156,12 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
   const companyPickerRef = useRef<HTMLDivElement | null>(null);
   const highlightOptionRef = useRef<HTMLButtonElement | null>(null);
 
-  const expiries = useMemo(
-    () => (meta ? listUniqueExpiries(meta.expiriesByUnderlying) : []),
-    [meta],
-  );
+  const expiries = useMemo(() => {
+    if (!meta) {
+      return [];
+    }
+    return listExpiriesForSelection(selectedCompanies, meta.expiriesByUnderlying);
+  }, [meta, selectedCompanies]);
 
   const selectedExpiry = useMemo(() => {
     if (!expiries.length) {
@@ -212,8 +215,25 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
 
   function addCompany(symbol: string, expiryForSymbol?: string) {
     if (expiryForSymbol && expiryForSymbol !== selectedExpiry) {
-      setExpiryIso(expiryForSymbol);
-      setSelectedCompanies([symbol]);
+      const nextSelection = selectedCompanies.includes(symbol)
+        ? selectedCompanies
+        : [...selectedCompanies, symbol]
+            .sort((left, right) => left.localeCompare(right))
+            .slice(0, MAX_SELECTED_COMPANIES);
+      const shared =
+        meta != null
+          ? listExpiriesForSelection(nextSelection, meta.expiriesByUnderlying)
+          : [];
+      if (shared.length > 0) {
+        const preferred = shared.includes(expiryForSymbol)
+          ? expiryForSymbol
+          : shared[0];
+        setExpiryIso(preferred);
+        setSelectedCompanies(nextSelection);
+      } else {
+        setExpiryIso(expiryForSymbol);
+        setSelectedCompanies([symbol]);
+      }
       setCompanySearch("");
       setHighlightIndex(0);
       setCompanyPickerOpen(false);
@@ -695,21 +715,32 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                         <p className="px-3 py-2 text-xs font-medium text-zinc-500">
                           Available on other expiries
                         </p>
-                        {companyChoices.otherExpiryMatches.map((item) => (
-                          <button
-                            key={item.symbol}
-                            type="button"
-                            onClick={() =>
-                              addCompany(item.symbol, item.nextExpiryIso)
-                            }
-                            className="block w-full px-3 py-2 text-left text-sm text-zinc-800 hover:bg-zinc-50"
-                          >
-                            <span className="font-medium">{item.symbol}</span>
-                            <span className="mt-0.5 block text-xs text-zinc-500">
-                              Switch to {formatExpiryLabel(item.nextExpiryIso)}
-                            </span>
-                          </button>
-                        ))}
+                        {companyChoices.otherExpiryMatches.map((item) => {
+                          const keepsSelection =
+                            selectedCompanies.length > 0 &&
+                            selectedCompanies.every((symbol) =>
+                              (meta?.expiriesByUnderlying[symbol] ?? []).includes(
+                                item.expiryIso,
+                              ),
+                            );
+                          return (
+                            <button
+                              key={`${item.symbol}-${item.expiryIso}`}
+                              type="button"
+                              onClick={() => addCompany(item.symbol, item.expiryIso)}
+                              className="block w-full px-3 py-2 text-left text-sm text-zinc-800 hover:bg-zinc-50"
+                            >
+                              <span className="font-medium">{item.symbol}</span>
+                              <span className="mt-0.5 block text-xs text-zinc-500">
+                                {keepsSelection
+                                  ? `${formatExpiryLabel(item.expiryIso)} — keep current selection`
+                                  : selectedCompanies.length > 0
+                                    ? `${formatExpiryLabel(item.expiryIso)} · replace selection`
+                                    : formatExpiryLabel(item.expiryIso)}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     ) : null}
                     {companyChoices.truncated ? (
@@ -729,7 +760,6 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
               value={selectedExpiry}
               onChange={(event) => {
                 setExpiryIso(event.target.value);
-                setSelectedCompanies([]);
                 setCompanySearch("");
                 setCompanyPickerOpen(false);
                 setHighlightIndex(0);
@@ -867,8 +897,15 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
         </summary>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-600">
           <li>
-            You pick up to <span className="font-medium text-zinc-800">{MAX_SELECTED_COMPANIES}</span>{" "}
-            companies that list the selected expiry. Only those companies are screened.
+            Pick companies first or pick an expiry first. With companies selected, the expiry
+            list only shows dates that{" "}
+            <span className="font-medium text-zinc-800">every</span> selected name lists — so
+            changing expiry never drops names from the selection.
+          </li>
+          <li>
+            You can select up to{" "}
+            <span className="font-medium text-zinc-800">{MAX_SELECTED_COMPANIES}</span>{" "}
+            companies. Only names that list the chosen expiry can be added for that run.
           </li>
           <li>
             Settings (side, margin account, min spread %, min return % p.a., lots) are shared with
@@ -972,9 +1009,11 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
               ? `${rows.length} options meet min spread and min return across ${progress.eligible - progress.failed} companies.${elapsedMs === null ? "" : ` Report took ${formatDuration(elapsedMs)} to generate.`}`
               : progress.status === "cancelled"
                 ? `Stopped after ${progress.processed} companies. ${rows.length} qualifying options kept.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
-                : selectedCompanies.length > 0
-                  ? `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"}.`
-                  : `Pick up to ${MAX_SELECTED_COMPANIES} companies, then run the report.`}
+                : selectedCompanies.length > 0 && expiries.length === 0
+                  ? "No shared expiry across the selected companies. Remove a name or clear the list to continue."
+                  : selectedCompanies.length > 0
+                    ? `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"} on ${formatExpiryLabel(selectedExpiry)}.`
+                    : `Pick up to ${MAX_SELECTED_COMPANIES} companies, then run the report.`}
       </p>
 
       <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">

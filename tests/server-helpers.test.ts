@@ -4,6 +4,7 @@ import { detectBrokerFailure } from "@/server/kotak/broker-response";
 import {
   buildScripMasterRegistryFromInstruments,
   clearScripMasterRegistryMemoryCache,
+  filterExpiriesToCurrentAndNextMonth,
   listExpiriesForUnderlying,
   listOptionUnderlyings,
   loadScripMasterRegistry,
@@ -12,7 +13,14 @@ import {
   seedScripMasterRegistryMemoryCache,
 } from "@/server/kotak/scrip-master";
 import type { TradeSessionCredentials } from "@/server/kotak/auth";
-import { parseBuyDepth, resolveBestAsk, resolveBestBid, resolveYearHigh, resolveYearLow } from "@/server/kotak/quotes";
+import {
+  parseBuyDepth,
+  resolveBestAsk,
+  resolveBestBid,
+  resolveYearHigh,
+  resolveYearLow,
+  toQuoteToken,
+} from "@/server/kotak/quotes";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { redactValue } from "@/server/logging";
@@ -96,6 +104,21 @@ describe("scrip master memory cache", () => {
 1,TEST-EQ,TEST,EQ`,
         "nse_cm",
       ),
+      ...parseScripCsv(
+        `pSymbol,pTrdSymbol,pSymBl,pInstrumentType
+2,TESTB-EQ,TESTB,EQ`,
+        "bse_cm",
+      ),
+      ...parseScripCsv(
+        `pSymbol,pTrdSymbol,pSymBl,pInstrumentType,pOptionType,dStrikePrice,dExpiryDate
+3,TEST31JUL25100CE,TEST,OPTSTK,CE,10000,31-Jul-2025`,
+        "nse_fo",
+      ),
+      ...parseScripCsv(
+        `pSymbol,pTrdSymbol,pSymBl,pInstrumentType,pOptionType,dStrikePrice,dExpiryDate
+4,TESTB31JUL25100CE,TESTB,IO,CE,10000,31-Jul-2025`,
+        "bse_fo",
+      ),
     ]);
     clearScripMasterRegistryMemoryCache();
     seedScripMasterRegistryMemoryCache(registry);
@@ -173,9 +196,68 @@ describe("scrip csv parsing", () => {
     expect(listOptionUnderlyings(registry)).toEqual(["GRASIM"]);
     expect(listExpiriesForUnderlying(registry, "GRASIM")).toEqual(["2026-08-25"]);
   });
+
+  it("parses BSE IO options with Unix-epoch expiry timestamps", () => {
+    const csv = `pSymbol,pGroup,pExchSeg,pInstType,pSymbolName,pTrdSymbol,pOptionType,dStrikePrice;,lLotSize,lExpiryDate ,lMultiplier
+856820,XX,bse_fo,IO,SENSEX,SENSEX26JUL85300CE,CE,8530000,20,1785436199,1
+856821,XX,bse_fo,IO,SENSEX,SENSEX26JUL85300PE,PE,8530000,20,1785436199,1`;
+
+    const fo = parseScripCsv(csv, "bse_fo");
+    expect(fo).toHaveLength(2);
+    expect(fo[0]?.underlying).toBe("SENSEX");
+    expect(fo[0]?.instrumentType).toBe("IO");
+    expect(fo[0]?.expiryIso).toBe("2026-07-30");
+    expect(fo[0]?.strike).toBe(85300);
+
+    const registry = buildScripMasterRegistryFromInstruments("2026-07-23", [
+      ...fo,
+      ...parseScripCsv(
+        `pSymbol,pTrdSymbol,pSymBl,pInstrumentType
+1,SENSEX,SENSEX,`,
+        "bse_cm",
+      ),
+    ]);
+    expect(listOptionUnderlyings(registry)).toEqual(["SENSEX"]);
+    expect(
+      listExpiriesForUnderlying(registry, "SENSEX", new Date("2026-07-23T06:30:00Z")),
+    ).toEqual(["2026-07-30"]);
+  });
+
+  it("limits Sensex expiries to the current and next IST month", () => {
+    expect(
+      filterExpiriesToCurrentAndNextMonth(
+        ["2026-07-02", "2026-07-30", "2026-08-06", "2026-09-03", "2026-10-01"],
+        new Date("2026-07-23T06:30:00Z"),
+      ),
+    ).toEqual(["2026-07-02", "2026-07-30", "2026-08-06"]);
+
+    const csv = `pSymbol,pGroup,pExchSeg,pInstType,pSymbolName,pTrdSymbol,pOptionType,dStrikePrice;,lLotSize,lExpiryDate ,lMultiplier
+856820,XX,bse_fo,IO,SENSEX,SENSEX30JUL85300CE,CE,8530000,20,30-Jul-2026,1
+856821,XX,bse_fo,IO,SENSEX,SENSEX03SEP85300CE,CE,8530000,20,03-Sep-2026,1`;
+    const fo = parseScripCsv(csv, "bse_fo");
+    expect(fo.map((row) => row.expiryIso)).toEqual(["2026-07-30", "2026-09-03"]);
+    const registry = buildScripMasterRegistryFromInstruments("2026-07-23", [
+      ...fo,
+      ...parseScripCsv(
+        `pSymbol,pTrdSymbol,pSymBl,pInstrumentType
+1,SENSEX,SENSEX,`,
+        "bse_cm",
+      ),
+    ]);
+    expect(
+      listExpiriesForUnderlying(registry, "SENSEX", new Date("2026-07-23T06:30:00Z")),
+    ).toEqual(["2026-07-30"]);
+  });
 });
 
 describe("quote bid/ask resolution", () => {
+  it("maps cash index tokens to Kotak quote names", () => {
+    expect(toQuoteToken("26000")).toBe("Nifty 50");
+    expect(toQuoteToken("1")).toBe("SENSEX");
+    expect(toQuoteToken("26009")).toBe("Nifty Bank");
+    expect(toQuoteToken("11536")).toBe("11536");
+  });
+
   it("reads best bid/ask from depth and skips empty levels", () => {
     expect(
       resolveBestBid({

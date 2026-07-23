@@ -5,6 +5,7 @@ import {
   enrichCandidatesWithMargins,
   filterCompanyChoices,
   filterQualifyingCandidates,
+  listExpiriesForSelection,
   listUniqueExpiries,
   runPool,
   selectTopCandidatesBySide,
@@ -70,7 +71,7 @@ describe("filterCompanyChoices", () => {
     expect(result.total).toBe(4);
   });
 
-  it("surfaces matches that exist on other expiries", () => {
+  it("surfaces all near-term expiries for matches on other dates", () => {
     const result = filterCompanyChoices(
       ["RELIANCE", "TCS"],
       [],
@@ -78,15 +79,18 @@ describe("filterCompanyChoices", () => {
       50,
       ["NIFTY", "RELIANCE", "TCS"],
       {
-        NIFTY: ["2026-07-30", "2026-08-06"],
+        NIFTY: ["2026-07-23", "2026-07-30", "2026-08-06", "2026-12-29"],
         RELIANCE: ["2026-07-28"],
         TCS: ["2026-07-28"],
       },
       "2026-07-28",
+      new Date("2026-07-23T06:30:00Z"),
     );
     expect(result.matches).toEqual([]);
     expect(result.otherExpiryMatches).toEqual([
-      { symbol: "NIFTY", nextExpiryIso: "2026-07-30" },
+      { symbol: "NIFTY", expiryIso: "2026-07-23" },
+      { symbol: "NIFTY", expiryIso: "2026-07-30" },
+      { symbol: "NIFTY", expiryIso: "2026-08-06" },
     ]);
   });
 });
@@ -99,6 +103,41 @@ describe("listUniqueExpiries", () => {
         BBB: ["2026-08-28"],
       }),
     ).toEqual(["2026-08-28", "2026-09-25"]);
+  });
+});
+
+describe("listExpiriesForSelection", () => {
+  const byUnderlying = {
+    SENSEX: ["2026-07-30", "2026-08-06", "2026-12-29"],
+    RELIANCE: ["2026-07-28", "2026-08-28", "2026-12-29", "2027-06-24"],
+    TCS: ["2026-07-28", "2026-08-28", "2026-12-29"],
+  };
+  const now = new Date("2026-07-23T06:30:00Z");
+
+  it("returns near-term unique expiries when nothing is selected", () => {
+    expect(listExpiriesForSelection([], byUnderlying, now)).toEqual([
+      "2026-07-28",
+      "2026-07-30",
+      "2026-08-06",
+      "2026-08-28",
+    ]);
+  });
+
+  it("returns only that underlying's near-term expiries for a single selection", () => {
+    expect(listExpiriesForSelection(["SENSEX"], byUnderlying, now)).toEqual([
+      "2026-07-30",
+      "2026-08-06",
+    ]);
+  });
+
+  it("returns the near-term intersection across multiple selections", () => {
+    expect(listExpiriesForSelection(["RELIANCE", "TCS"], byUnderlying, now)).toEqual([
+      "2026-07-28",
+      "2026-08-28",
+    ]);
+    expect(listExpiriesForSelection(["SENSEX", "RELIANCE"], byUnderlying, now)).toEqual(
+      [],
+    );
   });
 });
 

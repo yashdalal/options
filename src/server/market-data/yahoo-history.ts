@@ -42,6 +42,8 @@ const INDEX_YAHOO_SYMBOLS: Record<string, string> = {
   BANKNIFTY: "^NSEBANK",
   FINNIFTY: "NIFTY_FIN_SERVICE.NS",
   MIDCPNIFTY: "NIFTY_MID_SELECT.NS",
+  SENSEX: "^BSESN",
+  BANKEX: "BSE-BANK.BO",
 };
 
 export function toYahooSymbol(nseSymbol: string): string {

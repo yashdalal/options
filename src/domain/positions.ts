@@ -132,7 +132,7 @@ export function normalizePositions(
 
   rawPositions.forEach((raw, index) => {
     const exchangeSegment = String(raw.exSeg ?? "").toLowerCase();
-    if (exchangeSegment !== "nse_fo") {
+    if (exchangeSegment !== "nse_fo" && exchangeSegment !== "bse_fo") {
       return;
     }
 

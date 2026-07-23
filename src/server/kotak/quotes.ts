@@ -192,8 +192,19 @@ function chunk<T>(items: T[], size: number): T[][] {
   return groups;
 }
 
-function toQuoteToken(instrumentToken: string): string {
-  return instrumentToken === "26000" ? "Nifty 50" : instrumentToken;
+/** Kotak quotes use index names, not scrip-master pSymbol, for cash indexes. */
+const INDEX_QUOTE_TOKENS: Record<string, string> = {
+  "26000": "Nifty 50",
+  "26009": "Nifty Bank",
+  "26037": "Nifty Fin Service",
+  "26074": "NIFTY MID SELECT",
+  "1": "SENSEX",
+  "12": "BANKEX",
+  "47": "SENSEX50",
+};
+
+export function toQuoteToken(instrumentToken: string): string {
+  return INDEX_QUOTE_TOKENS[instrumentToken] ?? instrumentToken;
 }
 
 async function fetchQuoteBatch(

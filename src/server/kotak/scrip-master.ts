@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { filterExpiriesWithinMonthsAhead } from "@/lib/expiry-horizon";
 import { kotakFetch } from "./client";
 import { KotakApiError } from "./errors";
 import type { TradeSessionCredentials } from "./auth";
@@ -40,7 +41,13 @@ const CACHE_DIR =
     ? path.join(os.tmpdir(), "near-expiry", "scrip-master")
     : path.join(process.cwd(), ".cache", "scrip-master");
 
-const SCRIP_REGISTRY_BUILD = 2;
+const SCRIP_REGISTRY_BUILD = 4;
+
+const SCRIP_SEGMENTS = ["nse_fo", "nse_cm", "bse_fo", "bse_cm"] as const;
+type ScripSegment = (typeof SCRIP_SEGMENTS)[number];
+
+const CASH_SEGMENTS = new Set<string>(["nse_cm", "bse_cm"]);
+const OPTION_SEGMENTS = new Set<string>(["nse_fo", "bse_fo"]);
 
 const globalStore = globalThis as typeof globalThis & {
   __scripMasterRegistryCache?: {
@@ -49,6 +56,10 @@ const globalStore = globalThis as typeof globalThis & {
     registry: ScripMasterRegistry;
   };
 };
+
+if (globalStore.__scripMasterRegistryCache?.build !== SCRIP_REGISTRY_BUILD) {
+  delete globalStore.__scripMasterRegistryCache;
+}
 
 function todayIstDate(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -114,7 +125,10 @@ function formatUtcDate(ms: number): string {
   return `${year}-${month}-${day}`;
 }
 
-function parseExpiry(value: string | undefined): string | null {
+function parseExpiry(
+  value: string | undefined,
+  exchangeSegment?: string,
+): string | null {
   if (!value || value === "-" || value === "NA") {
     return null;
   }
@@ -168,11 +182,14 @@ function parseExpiry(value: string | undefined): string | null {
     }
   }
 
-  // Kotak Neo masters use seconds since 1980-01-01 in lExpiryDate/pExpiryDate.
+  // NSE masters use seconds since 1980-01-01; BSE masters use Unix epoch seconds.
   if (/^\d+(\.\d+)?$/.test(value.trim())) {
     const seconds = Number(value);
     if (Number.isFinite(seconds) && seconds > 0) {
-      return formatUtcDate(KOTAK_EPOCH_MS + seconds * 1000);
+      const ms = exchangeSegment?.startsWith("bse_")
+        ? seconds * 1000
+        : KOTAK_EPOCH_MS + seconds * 1000;
+      return formatUtcDate(ms);
     }
   }
 
@@ -288,7 +305,10 @@ export function parseScripCsv(
       instrumentType,
       optionType,
       strike: parseStrike(strikeIdx >= 0 ? cells[strikeIdx] : undefined),
-      expiryIso: parseExpiry(expiryIdx >= 0 ? cells[expiryIdx] : undefined),
+      expiryIso: parseExpiry(
+        expiryIdx >= 0 ? cells[expiryIdx] : undefined,
+        exchangeSegment,
+      ),
       lotSize: toNumber(lotIdx >= 0 ? cells[lotIdx] : undefined) ?? 1,
       multiplier: toNumber(multiplierIdx >= 0 ? cells[multiplierIdx] : undefined) ?? 1,
     });
@@ -328,7 +348,7 @@ function setPreferredCashSymbol(
 }
 
 function isScreenableOption(instrument: ScripInstrument): boolean {
-  if (instrument.exchangeSegment !== "nse_fo" || !instrument.optionType) {
+  if (!OPTION_SEGMENTS.has(instrument.exchangeSegment) || !instrument.optionType) {
     return false;
   }
   if (instrument.strike === null || !instrument.expiryIso) {
@@ -338,6 +358,8 @@ function isScreenableOption(instrument: ScripInstrument): boolean {
   return (
     type.includes("OPTSTK") ||
     type.includes("OPTIDX") ||
+    type === "IO" ||
+    type === "SO" ||
     type === "CE" ||
     type === "PE" ||
     type === ""
@@ -351,7 +373,7 @@ function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripM
 
   for (const instrument of instruments) {
     byToken.set(`${instrument.exchangeSegment}:${instrument.instrumentToken}`, instrument);
-    if (instrument.exchangeSegment === "nse_cm") {
+    if (CASH_SEGMENTS.has(instrument.exchangeSegment)) {
       setPreferredCashSymbol(cashBySymbol, instrument.underlying.toUpperCase(), instrument);
       const withoutSuffix = instrument.tradingSymbol.replace(/-EQ$/i, "").toUpperCase();
       setPreferredCashSymbol(cashBySymbol, withoutSuffix, instrument);
@@ -390,33 +412,64 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+function registryIncludesSegments(
+  registry: ScripMasterRegistry,
+  segments: readonly string[],
+): boolean {
+  const present = new Set<string>();
+  for (const key of registry.byToken.keys()) {
+    const segment = key.split(":")[0];
+    if (segment) {
+      present.add(segment);
+    }
+  }
+  return segments.every((segment) => present.has(segment));
+}
+
 export async function loadScripMasterRegistry(
   session: TradeSessionCredentials,
 ): Promise<ScripMasterRegistry> {
   const asOfDate = todayIstDate();
   const memory = globalStore.__scripMasterRegistryCache;
-  if (memory?.asOfDate === asOfDate && memory.build === SCRIP_REGISTRY_BUILD) {
+  if (
+    memory?.asOfDate === asOfDate &&
+    memory.build === SCRIP_REGISTRY_BUILD &&
+    registryIncludesSegments(memory.registry, SCRIP_SEGMENTS)
+  ) {
     return memory.registry;
   }
+  delete globalStore.__scripMasterRegistryCache;
 
   await mkdir(CACHE_DIR, { recursive: true });
 
   const metaPath = path.join(CACHE_DIR, "meta.json");
-  const foPath = path.join(CACHE_DIR, "nse_fo.csv");
-  const cmPath = path.join(CACHE_DIR, "nse_cm.csv");
+  const segmentPaths = Object.fromEntries(
+    SCRIP_SEGMENTS.map((segment) => [segment, path.join(CACHE_DIR, `${segment}.csv`)]),
+  ) as Record<ScripSegment, string>;
 
   let useCache = false;
-  if ((await fileExists(metaPath)) && (await fileExists(foPath)) && (await fileExists(cmPath))) {
+  if (
+    (await fileExists(metaPath)) &&
+    (await Promise.all(SCRIP_SEGMENTS.map((segment) => fileExists(segmentPaths[segment])))).every(
+      Boolean,
+    )
+  ) {
     try {
-      const meta = JSON.parse(await readFile(metaPath, "utf8")) as { asOfDate?: string };
-      useCache = meta.asOfDate === asOfDate;
+      const meta = JSON.parse(await readFile(metaPath, "utf8")) as {
+        asOfDate?: string;
+        segments?: string[];
+      };
+      useCache =
+        meta.asOfDate === asOfDate &&
+        Array.isArray(meta.segments) &&
+        SCRIP_SEGMENTS.every((segment) => meta.segments?.includes(segment));
     } catch {
       useCache = false;
     }
   }
 
   if (!useCache) {
-    logInfo("Downloading scrip master files");
+    logInfo("Downloading scrip master files", { segments: [...SCRIP_SEGMENTS] });
     const payload = await kotakFetch(
       `${session.baseUrl}/script-details/1.0/masterscrip/file-paths`,
       {
@@ -433,40 +486,66 @@ export async function loadScripMasterRegistry(
       throw new KotakApiError("Unexpected scrip master response", 500, "invalid_response");
     }
 
-    const foUrl = parsed.data.data.filesPaths.find((url) => url.includes("nse_fo"));
-    const cmUrl = parsed.data.data.filesPaths.find((url) => url.includes("nse_cm"));
-    if (!foUrl || !cmUrl) {
-      throw new KotakApiError("Missing nse_fo/nse_cm scrip master files", 500, "invalid_response");
-    }
+    const filePaths = parsed.data.data.filesPaths;
+    const segmentUrls = SCRIP_SEGMENTS.map((segment) => {
+      const url = filePaths.find((candidate) =>
+        candidate.toLowerCase().includes(segment.toLowerCase()),
+      );
+      if (!url) {
+        logWarn("Scrip master file path missing for segment", {
+          segment,
+          available: filePaths,
+        });
+        throw new KotakApiError(
+          `Missing ${segment} scrip master file`,
+          500,
+          "invalid_response",
+        );
+      }
+      return { segment, url };
+    });
 
-    const [foCsv, cmCsv] = await Promise.all([
-      fetch(foUrl).then((response) => {
+    const downloads = await Promise.all(
+      segmentUrls.map(async ({ segment, url }) => {
+        const response = await fetch(url);
         if (!response.ok) {
-          throw new KotakApiError("Failed to download nse_fo scrip master", response.status);
+          throw new KotakApiError(
+            `Failed to download ${segment} scrip master`,
+            response.status,
+          );
         }
-        return response.text();
+        const csv = await response.text();
+        return { segment, csv };
       }),
-      fetch(cmUrl).then((response) => {
-        if (!response.ok) {
-          throw new KotakApiError("Failed to download nse_cm scrip master", response.status);
-        }
-        return response.text();
-      }),
-    ]);
+    );
 
-    await writeFile(foPath, foCsv, "utf8");
-    await writeFile(cmPath, cmCsv, "utf8");
-    await writeFile(metaPath, JSON.stringify({ asOfDate }, null, 2), "utf8");
+    await Promise.all(
+      downloads.map(({ segment, csv }) => writeFile(segmentPaths[segment], csv, "utf8")),
+    );
+    await writeFile(
+      metaPath,
+      JSON.stringify(
+        {
+          asOfDate,
+          build: SCRIP_REGISTRY_BUILD,
+          segments: [...SCRIP_SEGMENTS],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
   } else {
-    logInfo("Using cached scrip master", { asOfDate });
+    logInfo("Using cached scrip master", { asOfDate, build: SCRIP_REGISTRY_BUILD });
   }
 
-  const foCsv = await readFile(foPath, "utf8");
-  const cmCsv = await readFile(cmPath, "utf8");
-  const instruments = [
-    ...parseScripCsv(foCsv, "nse_fo"),
-    ...parseScripCsv(cmCsv, "nse_cm"),
-  ];
+  const instruments = (
+    await Promise.all(
+      SCRIP_SEGMENTS.map(async (segment) =>
+        parseScripCsv(await readFile(segmentPaths[segment], "utf8"), segment),
+      ),
+    )
+  ).flat();
 
   if (instruments.length === 0) {
     logWarn("Scrip master parsed zero instruments");
@@ -492,9 +571,18 @@ export function listOptionUnderlyings(registry: ScripMasterRegistry): string[] {
   return registry.optionUnderlyings;
 }
 
+/** Sensex weeklies go far out; report/screener only need this month and next (IST). */
+export function filterExpiriesToCurrentAndNextMonth(
+  expiries: string[],
+  now: Date = new Date(),
+): string[] {
+  return filterExpiriesWithinMonthsAhead(expiries, 1, now);
+}
+
 export function listExpiriesForUnderlying(
   registry: ScripMasterRegistry,
   underlying: string,
+  now: Date = new Date(),
 ): string[] {
   const options = registry.optionsByUnderlying.get(underlying.toUpperCase()) ?? [];
   const expiries = new Set<string>();
@@ -503,7 +591,11 @@ export function listExpiriesForUnderlying(
       expiries.add(option.expiryIso);
     }
   }
-  return [...expiries].sort();
+  const sorted = [...expiries].sort();
+  if (underlying.toUpperCase() === "SENSEX") {
+    return filterExpiriesToCurrentAndNextMonth(sorted, now);
+  }
+  return sorted;
 }
 
 export function listOptionsForUnderlyingExpiry(

@@ -1,6 +1,10 @@
 import { calculateAnnualizedReturnPct } from "@/domain/screening";
 import type { ScreenCandidate, ScreenSnapshot } from "@/domain/types";
 import type { AccountId } from "@/config/accounts";
+import { filterExpiriesWithinMonthsAhead } from "@/lib/expiry-horizon";
+
+/** Report expiry picker: current IST month through two months ahead. */
+export const REPORT_EXPIRY_MONTHS_AHEAD = 2;
 
 export type ScreenCompanyParams = {
   symbol: string;
@@ -141,11 +145,12 @@ export function filterCompanyChoices(
   allUnderlyings: string[] = eligible,
   expiriesByUnderlying: Record<string, string[]> = {},
   selectedExpiry = "",
+  now: Date = new Date(),
 ): {
   matches: string[];
   truncated: boolean;
   total: number;
-  otherExpiryMatches: { symbol: string; nextExpiryIso: string }[];
+  otherExpiryMatches: { symbol: string; expiryIso: string }[];
 } {
   const selectedSet = new Set(selected);
   const available = eligible.filter((symbol) => !selectedSet.has(symbol));
@@ -179,22 +184,25 @@ export function filterCompanyChoices(
         !eligibleSet.has(symbol) &&
         symbol.includes(normalized),
     )
-    .map((symbol) => {
-      const expiries = (expiriesByUnderlying[symbol] ?? [])
-        .filter((expiry) => !selectedExpiry || expiry >= selectedExpiry)
-        .sort();
-      const fallback = [...(expiriesByUnderlying[symbol] ?? [])].sort();
-      const nextExpiryIso = expiries[0] ?? fallback[0] ?? "";
-      return { symbol, nextExpiryIso };
+    .flatMap((symbol) => {
+      const expiries = filterExpiriesWithinMonthsAhead(
+        [...(expiriesByUnderlying[symbol] ?? [])].sort(),
+        REPORT_EXPIRY_MONTHS_AHEAD,
+        now,
+      ).filter((expiry) => expiry !== selectedExpiry);
+      return expiries.map((expiryIso) => ({ symbol, expiryIso }));
     })
-    .filter((item) => item.nextExpiryIso)
     .sort((left, right) => {
       const leftPrefix = left.symbol.startsWith(normalized) ? 0 : 1;
       const rightPrefix = right.symbol.startsWith(normalized) ? 0 : 1;
       if (leftPrefix !== rightPrefix) {
         return leftPrefix - rightPrefix;
       }
-      return left.symbol.localeCompare(right.symbol);
+      const symbolCmp = left.symbol.localeCompare(right.symbol);
+      if (symbolCmp !== 0) {
+        return symbolCmp;
+      }
+      return left.expiryIso.localeCompare(right.expiryIso);
     });
 
   return {
@@ -215,6 +223,32 @@ export function listUniqueExpiries(
     }
   }
   return [...expiries].sort();
+}
+
+/** Expiries shared by every selected symbol. Empty selection → all unique expiries. */
+export function listExpiriesForSelection(
+  selectedSymbols: string[],
+  expiriesByUnderlying: Record<string, string[]>,
+  now: Date = new Date(),
+): string[] {
+  const raw =
+    selectedSymbols.length === 0
+      ? listUniqueExpiries(expiriesByUnderlying)
+      : (() => {
+          let shared: Set<string> | null = null;
+          for (const symbol of selectedSymbols) {
+            const list = expiriesByUnderlying[symbol] ?? [];
+            const next = new Set(list);
+            if (shared === null) {
+              shared = next;
+              continue;
+            }
+            shared = new Set([...shared].filter((expiry) => next.has(expiry)));
+          }
+          return shared ? [...shared].sort() : [];
+        })();
+
+  return filterExpiriesWithinMonthsAhead(raw, REPORT_EXPIRY_MONTHS_AHEAD, now);
 }
 
 async function loadMarginsForCandidates(

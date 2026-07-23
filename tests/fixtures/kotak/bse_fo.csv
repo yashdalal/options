@@ -1,0 +1,3 @@
+pSymbol,pTrdSymbol,pSymBl,pInstrumentType,pOptionType,dStrikePrice,dExpiryDate,lLotSize,lMultiplier
+81001,SENSEX31JUL2580000CE,SENSEX,IO,CE,8000000,31-Jul-2025,20,1
+81002,SENSEX31JUL2579500PE,SENSEX,IO,PE,7950000,31-Jul-2025,20,1

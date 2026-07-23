@@ -44,6 +44,14 @@ const cmCsv = readFileSync(
   path.join(process.cwd(), "tests/fixtures/kotak/nse_cm.csv"),
   "utf8",
 );
+const bseFoCsv = readFileSync(
+  path.join(process.cwd(), "tests/fixtures/kotak/bse_fo.csv"),
+  "utf8",
+);
+const bseCmCsv = readFileSync(
+  path.join(process.cwd(), "tests/fixtures/kotak/bse_cm.csv"),
+  "utf8",
+);
 
 const prakashAccount = { accountId: "prakash" as const, accountLabel: "Prakash" };
 const gopaAccount = { accountId: "gopa" as const, accountLabel: "Gopa" };
@@ -52,6 +60,8 @@ function registryFromFixtures() {
   const instruments = [
     ...parseScripCsv(foCsv, "nse_fo"),
     ...parseScripCsv(cmCsv, "nse_cm"),
+    ...parseScripCsv(bseFoCsv, "bse_fo"),
+    ...parseScripCsv(bseCmCsv, "bse_cm"),
   ];
   return buildScripMasterRegistryFromInstruments("2025-07-19", instruments);
 }
@@ -445,10 +455,14 @@ describe("screening math", () => {
     const registry = registryFromFixtures();
     expect(registry.optionUnderlyings).toContain("SBIN");
     expect(registry.optionUnderlyings).toContain("NIFTY");
+    expect(registry.optionUnderlyings).toContain("SENSEX");
     expect(listExpiriesForUnderlying(registry, "SBIN")).toContain("2025-07-31");
     expect(listOptionsForUnderlyingExpiry(registry, "SBIN", "2025-07-31").length).toBeGreaterThan(
       0,
     );
     expect(listOptionsForUnderlyingExpiry(registry, "NIFTY", "2025-07-31")).toHaveLength(2);
+    const sensexOptions = listOptionsForUnderlyingExpiry(registry, "SENSEX", "2025-07-31");
+    expect(sensexOptions).toHaveLength(2);
+    expect(sensexOptions.every((item) => item.exchangeSegment === "bse_fo")).toBe(true);
   });
 });

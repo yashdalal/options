@@ -15,6 +15,7 @@ describe("toYahooSymbol", () => {
   it("maps index underlyings to Yahoo index tickers", () => {
     expect(toYahooSymbol("NIFTY")).toBe("^NSEI");
     expect(toYahooSymbol("BANKNIFTY")).toBe("^NSEBANK");
+    expect(toYahooSymbol("SENSEX")).toBe("^BSESN");
   });
 });
 

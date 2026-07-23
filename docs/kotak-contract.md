@@ -35,6 +35,8 @@ Positions are tagged with `accountId` / `accountLabel` for attribution. Within e
 |---|---|---|
 | Positions | `{baseUrl}/quick/user/positions` | `Auth`, `Sid`, `neo-fin-key` (no Authorization) |
 | Quotes | `{baseUrl}/script-details/1.0/quotes/neosymbol/{seg\|token[,…]}` | `Authorization: <access token>` |
+
+Cash **indexes** must use Kotak’s named identifier, not `pSymbol` (e.g. `nse_cm|Nifty 50`, `bse_cm|SENSEX`). Equity/FO still use the numeric token.
 | Scrip master | `{baseUrl}/script-details/1.0/masterscrip/file-paths` | `Authorization: <access token>` |
 | Check margin | `{baseUrl}/quick/user/check-margin` | `Auth`, `Sid`, `neo-fin-key` (no Authorization) |
 
@@ -54,7 +56,7 @@ Yahoo Finance daily bars (`{SYMBOL}.NS`, `range=1y`) instead of Kotak year field
 
 ## Option premiums
 
-There is no dedicated option-chain endpoint. Build the chain from the daily `nse_fo` scrip master (`OPTSTK` / `OPTIDX` rows with strike, expiry, lot size, CE/PE), then quote `nse_fo|{instrumentToken}`.
+There is no dedicated option-chain endpoint. Build the chain from the daily scrip masters (`nse_fo` / `bse_fo` option rows with strike, expiry, lot size, CE/PE), then quote `{exchangeSegment}|{instrumentToken}` (for example `nse_fo|…` or `bse_fo|…`). Spot underlyings come from `nse_cm` / `bse_cm` (SENSEX lives on BSE). NSE FO instrument types are typically `OPTSTK` / `OPTIDX`; BSE FO uses `SO` / `IO`. NSE expiry epoch fields are seconds since 1980-01-01; BSE expiry epoch fields are Unix seconds.
 
 For sell-side screener premium, walk `depth.buy` levels with price > 0. Available lots at a level are `floor(quantity / lotSize)` (not the ORDERS count). When requested lots exceed liquidity at the best bid, the screener emits one candidate row per fill price. Fall back to `buy_price` as a single fill only when depth has no usable quantity. Do not use LTP for executable sell premium — deep OTM options often show a stale tick with an empty buy book.
 
@@ -63,7 +65,7 @@ For sell-side screener premium, walk `depth.buy` levels with price > 0. Availabl
 `POST {baseUrl}/quick/user/check-margin` with `Content-Type: application/x-www-form-urlencoded` and body field:
 
 ```
-jData={"brkName":"KOTAK","brnchId":"ONLINE","exSeg":"nse_fo","prc":"<premium>","prcTp":"L","prod":"NRML","qty":"<lotSize*lots>","tok":"<instrumentToken>","trnsTp":"S"}
+jData={"brkName":"KOTAK","brnchId":"ONLINE","exSeg":"<nse_fo|bse_fo>","prc":"<premium>","prcTp":"L","prod":"NRML","qty":"<lotSize*lots>","tok":"<instrumentToken>","trnsTp":"S"}
 ```
 
 Prefer response `ordMrgn` as incremental margin for the checked order (fallbacks: `reqdMrgn`, then `totMrgnUsd` / `mrgnUsd`). `totMrgnUsd` is account-level total including existing positions, so it is too high for screener return math. One instrument per request. Expect `429` under load; the app shares an ~8 req/s limiter across quotes and margin.
@@ -76,7 +78,7 @@ Prefer:
 netQty = ((cfBuyQty + flBuyQty) - (cfSellQty + flSellQty)) / lotSz
 ```
 
-Ignore cash-market rows (`exSeg !== nse_fo`) and zero-net option rows.
+Ignore cash-market rows (`exSeg` not in `nse_fo` / `bse_fo`) and zero-net option rows.
 
 Kotak may return `stat: Not_Ok`, `stCode: 5203`, `errMsg: "No Data"` when an account has no open positions. Treat that as an empty book, not a hard failure.
 
