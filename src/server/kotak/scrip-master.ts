@@ -40,6 +40,13 @@ const CACHE_DIR =
     ? path.join(os.tmpdir(), "near-expiry", "scrip-master")
     : path.join(process.cwd(), ".cache", "scrip-master");
 
+const globalStore = globalThis as typeof globalThis & {
+  __scripMasterRegistryCache?: {
+    asOfDate: string;
+    registry: ScripMasterRegistry;
+  };
+};
+
 function todayIstDate(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
@@ -47,6 +54,19 @@ function todayIstDate(): string {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+}
+
+export function clearScripMasterRegistryMemoryCache(): void {
+  delete globalStore.__scripMasterRegistryCache;
+}
+
+export function seedScripMasterRegistryMemoryCache(
+  registry: ScripMasterRegistry,
+): void {
+  globalStore.__scripMasterRegistryCache = {
+    asOfDate: registry.asOfDate,
+    registry,
+  };
 }
 
 function parseCsvLine(line: string): string[] {
@@ -364,6 +384,11 @@ export async function loadScripMasterRegistry(
   session: TradeSessionCredentials,
 ): Promise<ScripMasterRegistry> {
   const asOfDate = todayIstDate();
+  const memory = globalStore.__scripMasterRegistryCache;
+  if (memory?.asOfDate === asOfDate) {
+    return memory.registry;
+  }
+
   await mkdir(CACHE_DIR, { recursive: true });
 
   const metaPath = path.join(CACHE_DIR, "meta.json");
@@ -437,7 +462,9 @@ export async function loadScripMasterRegistry(
     logWarn("Scrip master parsed zero instruments");
   }
 
-  return buildRegistry(asOfDate, instruments);
+  const registry = buildRegistry(asOfDate, instruments);
+  globalStore.__scripMasterRegistryCache = { asOfDate, registry };
+  return registry;
 }
 
 export function resolveCashInstrument(

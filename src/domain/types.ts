@@ -116,3 +116,18 @@ export type ScreenMeta = {
   underlyings: string[];
   expiriesByUnderlying: Record<string, string[]>;
 };
+
+export type InvestmentReportProgress = {
+  status: "idle" | "running" | "cancelled" | "completed";
+  expiryIso: string;
+  eligible: number;
+  skipped: number;
+  processed: number;
+  failed: number;
+  qualifyingCount: number;
+  currentSymbol: string | null;
+};
+
+export type InvestmentReportRow = ScreenCandidate & {
+  spot: number;
+};

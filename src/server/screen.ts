@@ -268,45 +268,40 @@ export async function getScreenMargins(
     count: items.length,
   });
 
-  const results: {
-    id?: string;
-    instrumentToken: string;
-    margin: number | null;
-    error?: string;
-  }[] = [];
-  for (const item of items) {
-    try {
-      const margin = await checkMargin(session, {
-        instrumentToken: item.instrumentToken,
-        exchangeSegment: item.exchangeSegment ?? "nse_fo",
-        tradingSymbol: item.tradingSymbol,
-        price: item.premium,
-        quantity: item.quantity,
-        transactionType: "S",
-        product: "NRML",
-        orderType: "L",
-      });
-      results.push({
-        id: item.id,
-        instrumentToken: item.instrumentToken,
-        margin: margin.totalMarginUsed,
-      });
-    } catch (error) {
-      if (
-        typeof error === "object" &&
-        error &&
-        "code" in error &&
-        (error as { code: string }).code === "session_expired"
-      ) {
-        handleBrokerAuthFailure(resolvedAccountId, error);
+  return Promise.all(
+    items.map(async (item) => {
+      try {
+        const margin = await checkMargin(session, {
+          instrumentToken: item.instrumentToken,
+          exchangeSegment: item.exchangeSegment ?? "nse_fo",
+          tradingSymbol: item.tradingSymbol,
+          price: item.premium,
+          quantity: item.quantity,
+          transactionType: "S",
+          product: "NRML",
+          orderType: "L",
+        });
+        return {
+          id: item.id,
+          instrumentToken: item.instrumentToken,
+          margin: margin.totalMarginUsed,
+        };
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error &&
+          "code" in error &&
+          (error as { code: string }).code === "session_expired"
+        ) {
+          handleBrokerAuthFailure(resolvedAccountId, error);
+        }
+        return {
+          id: item.id,
+          instrumentToken: item.instrumentToken,
+          margin: null,
+          error: error instanceof Error ? error.message : "margin_failed",
+        };
       }
-      results.push({
-        id: item.id,
-        instrumentToken: item.instrumentToken,
-        margin: null,
-        error: error instanceof Error ? error.message : "margin_failed",
-      });
-    }
-  }
-  return results;
+    }),
+  );
 }

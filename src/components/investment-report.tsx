@@ -1,0 +1,642 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ACCOUNT_DEFINITIONS, type AccountId } from "@/config/accounts";
+import type {
+  InvestmentReportProgress,
+  InvestmentReportRow,
+  ScreenMeta,
+  ScreenSideFilter,
+} from "@/domain/types";
+import { useScreenerSettings } from "@/hooks/use-screener-settings";
+import {
+  companiesForExpiry,
+  listUniqueExpiries,
+  runPool,
+  screenCompany,
+} from "@/lib/screen-company";
+
+const REPORT_CONCURRENCY = 2;
+
+type InvestmentReportProps = {
+  onLogout: () => void;
+  onLoginRequired: () => void;
+};
+
+function formatNumber(value: number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+  return value.toLocaleString("en-IN", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+  return `${value.toFixed(2)}%`;
+}
+
+function formatExpiryLabel(expiryIso: string): string {
+  const [year, month, day] = expiryIso.split("-").map(Number);
+  if (!year || !month || !day) {
+    return expiryIso;
+  }
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
+const IDLE_PROGRESS: InvestmentReportProgress = {
+  status: "idle",
+  expiryIso: "",
+  eligible: 0,
+  skipped: 0,
+  processed: 0,
+  failed: 0,
+  qualifyingCount: 0,
+  currentSymbol: null,
+};
+
+export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReportProps) {
+  const [settings, setSettings] = useScreenerSettings();
+  const [meta, setMeta] = useState<ScreenMeta | null>(null);
+  const [expiryIso, setExpiryIso] = useState("");
+  const [metaLoading, setMetaLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<InvestmentReportProgress>(IDLE_PROGRESS);
+  const [rows, setRows] = useState<InvestmentReportRow[]>([]);
+  const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const startedAtRef = useRef<number | null>(null);
+
+  const expiries = useMemo(
+    () => (meta ? listUniqueExpiries(meta.expiriesByUnderlying) : []),
+    [meta],
+  );
+
+  const selectedExpiry = useMemo(() => {
+    if (!expiries.length) {
+      return "";
+    }
+    return expiries.includes(expiryIso) ? expiryIso : expiries[0];
+  }, [expiries, expiryIso]);
+
+  const eligibility = useMemo(() => {
+    if (!meta || !selectedExpiry) {
+      return { eligible: [] as string[], skipped: 0 };
+    }
+    return companiesForExpiry(
+      meta.underlyings,
+      meta.expiriesByUnderlying,
+      selectedExpiry,
+    );
+  }, [meta, selectedExpiry]);
+
+  const loadMeta = useCallback(async () => {
+    setMetaLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/screen/meta", { cache: "no-store" });
+      if (response.status === 401) {
+        onLoginRequired();
+        return;
+      }
+      if (!response.ok) {
+        setError("Unable to load company list from scrip master.");
+        return;
+      }
+      const payload = (await response.json()) as ScreenMeta;
+      setMeta(payload);
+      const unique = listUniqueExpiries(payload.expiriesByUnderlying);
+      setExpiryIso((current) => current || unique[0] || "");
+    } catch {
+      setError("Unable to reach the local server for report meta.");
+    } finally {
+      setMetaLoading(false);
+    }
+  }, [onLoginRequired]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional mount fetch
+    void loadMeta();
+  }, [loadMeta]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const finishElapsed = useCallback(() => {
+    if (startedAtRef.current !== null) {
+      setElapsedMs(Date.now() - startedAtRef.current);
+    }
+  }, []);
+
+  const cancelReport = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    finishElapsed();
+    setProgress((current) =>
+      current.status === "running"
+        ? { ...current, status: "cancelled", currentSymbol: null }
+        : current,
+    );
+  }, [finishElapsed]);
+
+  const runReport = useCallback(async () => {
+    if (!meta || !selectedExpiry || eligibility.eligible.length === 0) {
+      return;
+    }
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    startedAtRef.current = Date.now();
+    setElapsedMs(null);
+
+    setError(null);
+    setRows([]);
+    setProgress({
+      status: "running",
+      expiryIso: selectedExpiry,
+      eligible: eligibility.eligible.length,
+      skipped: eligibility.skipped,
+      processed: 0,
+      failed: 0,
+      qualifyingCount: 0,
+      currentSymbol: eligibility.eligible[0] ?? null,
+    });
+
+    const collected: InvestmentReportRow[] = [];
+    let processed = 0;
+    let failed = 0;
+
+    try {
+      await runPool(
+        eligibility.eligible,
+        REPORT_CONCURRENCY,
+        async (symbol) => {
+          if (controller.signal.aborted) {
+            throw new DOMException("Aborted", "AbortError");
+          }
+          setProgress((current) => ({
+            ...current,
+            currentSymbol: symbol,
+          }));
+          try {
+            const result = await screenCompany({
+              symbol,
+              expiryIso: selectedExpiry,
+              spreadMin: settings.spreadMin,
+              returnMin: settings.returnMin,
+              side: settings.side,
+              lots: settings.lots,
+              accountId: settings.accountId,
+              signal: controller.signal,
+            });
+            const nextRows = result.qualifying.map((candidate) => ({
+              ...candidate,
+              spot: candidate.spot,
+            }));
+            collected.push(...nextRows);
+            collected.sort((left, right) => {
+              if (left.company !== right.company) {
+                return left.company.localeCompare(right.company);
+              }
+              const leftReturn = left.annualizedReturnPct ?? -Infinity;
+              const rightReturn = right.annualizedReturnPct ?? -Infinity;
+              if (leftReturn !== rightReturn) {
+                return rightReturn - leftReturn;
+              }
+              if (left.optionType !== right.optionType) {
+                return left.optionType.localeCompare(right.optionType);
+              }
+              return left.strike - right.strike;
+            });
+            setRows([...collected]);
+          } catch (err) {
+            if (
+              typeof err === "object" &&
+              err &&
+              "kind" in err &&
+              (err as { kind?: string }).kind === "auth"
+            ) {
+              throw err;
+            }
+            if (err instanceof DOMException && err.name === "AbortError") {
+              throw err;
+            }
+            failed += 1;
+          } finally {
+            processed += 1;
+            setProgress((current) => ({
+              ...current,
+              processed,
+              failed,
+              qualifyingCount: collected.length,
+            }));
+          }
+        },
+        controller.signal,
+      );
+
+      if (!controller.signal.aborted) {
+        finishElapsed();
+        setProgress((current) => ({
+          ...current,
+          status: "completed",
+          currentSymbol: null,
+          processed,
+          failed,
+          qualifyingCount: collected.length,
+        }));
+      }
+    } catch (err) {
+      if (
+        typeof err === "object" &&
+        err &&
+        "kind" in err &&
+        (err as { kind?: string }).kind === "auth"
+      ) {
+        finishElapsed();
+        onLoginRequired();
+        setProgress((current) => ({
+          ...current,
+          status: "cancelled",
+          currentSymbol: null,
+        }));
+        return;
+      }
+      if (err instanceof DOMException && err.name === "AbortError") {
+        finishElapsed();
+        return;
+      }
+      finishElapsed();
+      setError("Report stopped due to an unexpected error.");
+      setProgress((current) => ({
+        ...current,
+        status: "cancelled",
+        currentSymbol: null,
+      }));
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+    }
+  }, [
+    eligibility.eligible,
+    eligibility.skipped,
+    finishElapsed,
+    meta,
+    onLoginRequired,
+    selectedExpiry,
+    settings,
+  ]);
+
+  async function logout() {
+    abortRef.current?.abort();
+    await fetch("/api/auth/logout", { method: "POST" });
+    onLogout();
+  }
+
+  const running = progress.status === "running";
+
+  return (
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
+      <header className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-zinc-900">Investment Report</h1>
+            <p className="text-sm text-zinc-600">
+              Screen every company that lists the selected expiry with the same thresholds as the
+              screener. This can take a while because of broker rate limits.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            {running ? (
+              <button
+                type="button"
+                onClick={cancelReport}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Cancel
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void runReport()}
+                disabled={
+                  metaLoading || !selectedExpiry || eligibility.eligible.length === 0
+                }
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                Run report
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+          <label className="flex flex-col gap-1 text-sm text-zinc-700">
+            Expiry
+            <select
+              value={selectedExpiry}
+              onChange={(event) => setExpiryIso(event.target.value)}
+              disabled={metaLoading || running || !expiries.length}
+              className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5"
+            >
+              {expiries.map((expiry) => (
+                <option key={expiry} value={expiry}>
+                  {formatExpiryLabel(expiry)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-700">
+            Side
+            <select
+              value={settings.side}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  side: event.target.value as ScreenSideFilter,
+                }))
+              }
+              disabled={running}
+              className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5"
+            >
+              <option value="BOTH">Both</option>
+              <option value="CALL">Calls</option>
+              <option value="PUT">Puts</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-700">
+            Margin account
+            <select
+              value={settings.accountId}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  accountId: event.target.value as AccountId,
+                }))
+              }
+              disabled={running}
+              className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5"
+            >
+              {ACCOUNT_DEFINITIONS.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-700">
+            Min spread %
+            <input
+              type="number"
+              value={settings.spreadMin}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  spreadMin: Number(event.target.value),
+                }))
+              }
+              disabled={running}
+              className="rounded-lg border border-zinc-300 px-2 py-1.5"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-700">
+            Min return % p.a.
+            <input
+              type="number"
+              value={settings.returnMin}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  returnMin: Number(event.target.value),
+                }))
+              }
+              disabled={running}
+              className="rounded-lg border border-zinc-300 px-2 py-1.5"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-zinc-700">
+            Lots
+            <input
+              type="number"
+              min={1}
+              value={settings.lots}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  lots: Math.max(1, Math.floor(Number(event.target.value) || 1)),
+                }))
+              }
+              disabled={running}
+              className="rounded-lg border border-zinc-300 px-2 py-1.5"
+            />
+          </label>
+        </div>
+      </header>
+
+      {error ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+            Eligible companies
+          </span>
+          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
+            {selectedExpiry ? eligibility.eligible.length : "—"}
+          </span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+            Skipped (no expiry)
+          </span>
+          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
+            {selectedExpiry ? eligibility.skipped : "—"}
+          </span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+            Processed
+          </span>
+          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
+            {progress.status === "idle"
+              ? "—"
+              : `${progress.processed} / ${progress.eligible}`}
+          </span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+            Failed
+          </span>
+          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
+            {progress.status === "idle" ? "—" : progress.failed}
+          </span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+            Qualifying
+          </span>
+          <span className="text-lg font-semibold text-emerald-800 tabular-nums">
+            {progress.status === "idle" ? "—" : progress.qualifyingCount}
+          </span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+            Duration
+          </span>
+          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
+            {elapsedMs === null ? "—" : formatDuration(elapsedMs)}
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
+          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+            Status
+          </span>
+          <span className="text-base font-medium text-zinc-800">
+            {progress.status === "idle"
+              ? "Ready"
+              : progress.status === "running"
+                ? `Screening ${progress.currentSymbol ?? "…"}`
+                : progress.status === "cancelled"
+                  ? "Cancelled"
+                  : "Completed"}
+          </span>
+        </div>
+      </div>
+
+      <p className="text-sm text-zinc-600">
+        {metaLoading
+          ? "Loading companies…"
+          : running
+            ? `Scanning companies for ${formatExpiryLabel(selectedExpiry)}. Qualifying rows appear as each company finishes.`
+            : progress.status === "completed"
+              ? `${rows.length} options meet min spread and min return across ${progress.eligible - progress.failed} companies.${elapsedMs === null ? "" : ` Report took ${formatDuration(elapsedMs)} to generate.`}`
+              : progress.status === "cancelled"
+                ? `Stopped after ${progress.processed} companies. ${rows.length} qualifying options kept.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
+                : selectedExpiry
+                  ? `${eligibility.eligible.length} companies list ${formatExpiryLabel(selectedExpiry)}; ${eligibility.skipped} will be skipped.`
+                  : "Choose an expiry and run the report."}
+      </p>
+
+      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        <table className="min-w-full border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-zinc-50 shadow-[inset_0_-1px_0_#d4d4d8]">
+            <tr className="text-left text-zinc-700">
+              {(
+                [
+                  { heading: "Company" },
+                  { heading: "Side" },
+                  { heading: "Spot" },
+                  { heading: "Strike" },
+                  { heading: "Lots" },
+                  { heading: "Spread %" },
+                  { heading: "Ann. return %" },
+                  { heading: "Bid" },
+                  { heading: "Net premium" },
+                  { heading: "Margin" },
+                ] satisfies { heading: string }[]
+              ).map(({ heading }) => (
+                <th
+                  key={heading}
+                  className="border-b border-zinc-200 px-3 py-2 font-semibold whitespace-nowrap"
+                >
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
+                  {metaLoading
+                    ? "Loading companies…"
+                    : running
+                      ? "Screening companies…"
+                      : progress.status === "completed" || progress.status === "cancelled"
+                        ? "No options meet both min spread and min return %."
+                        : "Run a report for the selected expiry."}
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, index) => (
+                <tr
+                  key={row.id}
+                  className={index % 2 === 0 ? "bg-white" : "bg-zinc-50"}
+                >
+                  <td className="border-b border-zinc-100 px-3 py-2 font-medium">
+                    {row.company}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {row.optionType === "CALL" ? "CE" : "PE"}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.spot)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.strike)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.lots, 0)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatPercent(row.spreadPct)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2 font-semibold text-emerald-800">
+                    {formatPercent(row.annualizedReturnPct)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.premium)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.netPremium, 0)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.margin, 0)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

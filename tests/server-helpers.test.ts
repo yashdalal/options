@@ -3,11 +3,15 @@ import { assertApprovedBaseUrl } from "@/server/kotak/client";
 import { detectBrokerFailure } from "@/server/kotak/broker-response";
 import {
   buildScripMasterRegistryFromInstruments,
+  clearScripMasterRegistryMemoryCache,
   listExpiriesForUnderlying,
   listOptionUnderlyings,
+  loadScripMasterRegistry,
   parseScripCsv,
   resolveCashInstrument,
+  seedScripMasterRegistryMemoryCache,
 } from "@/server/kotak/scrip-master";
+import type { TradeSessionCredentials } from "@/server/kotak/auth";
 import { parseBuyDepth, resolveBestAsk, resolveBestBid } from "@/server/kotak/quotes";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -75,6 +79,37 @@ describe("empty positions payloads", () => {
         stat: "ok",
       }),
     ).toBe(false);
+  });
+});
+
+describe("scrip master memory cache", () => {
+  it("returns the seeded registry without contacting the broker", async () => {
+    const asOfDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const registry = buildScripMasterRegistryFromInstruments(asOfDate, [
+      ...parseScripCsv(
+        `pSymbol,pTrdSymbol,pSymBl,pInstrumentType
+1,TEST-EQ,TEST,EQ`,
+        "nse_cm",
+      ),
+    ]);
+    clearScripMasterRegistryMemoryCache();
+    seedScripMasterRegistryMemoryCache(registry);
+
+    const session: TradeSessionCredentials = {
+      accessToken: "unused",
+      tradingToken: "unused",
+      tradingSid: "unused",
+      baseUrl: "https://cis.kotaksecurities.com",
+      neoFinKey: "neotradeapi",
+    };
+
+    await expect(loadScripMasterRegistry(session)).resolves.toBe(registry);
+    clearScripMasterRegistryMemoryCache();
   });
 });
 

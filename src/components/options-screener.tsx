@@ -2,64 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ACCOUNT_DEFINITIONS, type AccountId } from "@/config/accounts";
-import { calculateAnnualizedReturnPct } from "@/domain/screening";
 import type {
   ScreenCandidate,
   ScreenMeta,
   ScreenSideFilter,
   ScreenSnapshot,
 } from "@/domain/types";
-
-const SETTINGS_KEY = "options_screener_settings";
-
-type ScreenerSettings = {
-  spreadMin: number;
-  returnMin: number;
-  lots: number;
-  side: ScreenSideFilter;
-  accountId: AccountId;
-};
-
-const DEFAULT_SETTINGS: ScreenerSettings = {
-  spreadMin: 18,
-  returnMin: 24,
-  lots: 1,
-  side: "BOTH",
-  accountId: "prakash",
-};
+import { useScreenerSettings } from "@/hooks/use-screener-settings";
+import { filterQualifyingCandidates, screenCompany } from "@/lib/screen-company";
 
 type OptionsScreenerProps = {
   onLogout: () => void;
   onLoginRequired: () => void;
 };
-
-function readSettings(): ScreenerSettings {
-  if (typeof window === "undefined") {
-    return DEFAULT_SETTINGS;
-  }
-  try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) {
-      return DEFAULT_SETTINGS;
-    }
-    const parsed = JSON.parse(raw) as Partial<ScreenerSettings>;
-    return {
-      spreadMin: Number(parsed.spreadMin) || DEFAULT_SETTINGS.spreadMin,
-      returnMin: Number(parsed.returnMin) || DEFAULT_SETTINGS.returnMin,
-      lots: Math.max(1, Math.floor(Number(parsed.lots) || 1)),
-      side:
-        parsed.side === "CALL" || parsed.side === "PUT" || parsed.side === "BOTH"
-          ? parsed.side
-          : "BOTH",
-      accountId:
-        parsed.accountId && ACCOUNT_DEFINITIONS.some((item) => item.id === parsed.accountId)
-          ? parsed.accountId
-          : "prakash",
-    };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -91,25 +46,16 @@ function formatExpiryLabel(expiryIso: string): string {
   });
 }
 
-type EnrichedCandidate = ScreenCandidate & {
-  marginLoading?: boolean;
-  marginError?: string;
-};
-
 export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerProps) {
-  const [settings, setSettings] = useState<ScreenerSettings>(() => readSettings());
+  const [settings, setSettings] = useScreenerSettings();
   const [meta, setMeta] = useState<ScreenMeta | null>(null);
   const [symbol, setSymbol] = useState("");
   const [expiryIso, setExpiryIso] = useState("");
   const [snapshot, setSnapshot] = useState<ScreenSnapshot | null>(null);
-  const [candidates, setCandidates] = useState<EnrichedCandidate[]>([]);
+  const [candidates, setCandidates] = useState<ScreenCandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [metaLoading, setMetaLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  }, [settings]);
 
   const expiries = useMemo(() => {
     if (!meta || !symbol) {
@@ -164,124 +110,6 @@ export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerPr
     void loadMeta();
   }, [loadMeta]);
 
-  const loadMargins = useCallback(
-    async (rows: ScreenCandidate[]) => {
-      const marginRows = rows.filter(
-        (row) => row.hasBid && row.premium !== null && row.premium > 0,
-      );
-      const enriched = new Map<string, EnrichedCandidate>(
-        rows.map((row) => [
-          row.id,
-          {
-            ...row,
-            marginLoading: Boolean(row.hasBid && row.premium),
-          },
-        ]),
-      );
-      setCandidates([...enriched.values()]);
-      if (marginRows.length === 0) {
-        return;
-      }
-      const chunkSize = 5;
-
-      for (let index = 0; index < marginRows.length; index += chunkSize) {
-        const chunk = marginRows.slice(index, index + chunkSize);
-        try {
-          const response = await fetch("/api/screen/margin", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              accountId: settings.accountId,
-              items: chunk.map((row) => ({
-                id: row.id,
-                instrumentToken: row.instrumentToken,
-                exchangeSegment: row.exchangeSegment,
-                tradingSymbol: row.tradingSymbol,
-                premium: row.premium,
-                quantity: row.lotSize * row.lots,
-              })),
-            }),
-          });
-          if (response.status === 401) {
-            onLoginRequired();
-            return;
-          }
-          if (!response.ok) {
-            for (const row of chunk) {
-              const current = enriched.get(row.id);
-              if (current) {
-                enriched.set(row.id, {
-                  ...current,
-                  marginLoading: false,
-                  marginError: "margin_failed",
-                });
-              }
-            }
-          } else {
-            const payload = (await response.json()) as {
-              margins: {
-                id?: string;
-                instrumentToken: string;
-                margin: number | null;
-                error?: string;
-              }[];
-            };
-            for (const [resultIndex, result] of payload.margins.entries()) {
-              const key = result.id ?? chunk[resultIndex]?.id;
-              if (!key) {
-                continue;
-              }
-              const current = enriched.get(key);
-              if (!current || current.netPremium === null) {
-                continue;
-              }
-              const annualizedReturnPct =
-                result.margin === null
-                  ? null
-                  : calculateAnnualizedReturnPct(
-                      current.netPremium,
-                      result.margin,
-                      current.calendarDaysLeft,
-                    );
-              enriched.set(key, {
-                ...current,
-                margin: result.margin,
-                annualizedReturnPct,
-                meetsReturn:
-                  annualizedReturnPct === null
-                    ? null
-                    : annualizedReturnPct >= settings.returnMin,
-                marginLoading: false,
-                marginError: result.error,
-              });
-            }
-          }
-        } catch {
-          for (const row of chunk) {
-            const current = enriched.get(row.id);
-            if (current) {
-              enriched.set(row.id, {
-                ...current,
-                marginLoading: false,
-                marginError: "margin_failed",
-              });
-            }
-          }
-        }
-        setCandidates([...enriched.values()].sort((left, right) => {
-          if (left.optionType !== right.optionType) {
-            return left.optionType.localeCompare(right.optionType);
-          }
-          if (left.strike !== right.strike) {
-            return left.strike - right.strike;
-          }
-          return left.fillIndex - right.fillIndex;
-        }));
-      }
-    },
-    [onLoginRequired, settings.accountId, settings.returnMin],
-  );
-
   const runScreen = useCallback(async () => {
     if (!symbol || !selectedExpiry) {
       return;
@@ -289,35 +117,32 @@ export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerPr
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({
+      const result = await screenCompany({
         symbol,
-        expiry: selectedExpiry,
-        spreadMin: String(settings.spreadMin),
-        returnMin: String(settings.returnMin),
+        expiryIso: selectedExpiry,
+        spreadMin: settings.spreadMin,
+        returnMin: settings.returnMin,
         side: settings.side,
-        lots: String(settings.lots),
+        lots: settings.lots,
+        accountId: settings.accountId,
       });
-      const response = await fetch(`/api/screen?${params.toString()}`, {
-        cache: "no-store",
-      });
-      if (response.status === 401) {
+      setSnapshot(result.snapshot);
+      setCandidates(result.candidates);
+    } catch (err) {
+      if (
+        typeof err === "object" &&
+        err &&
+        "kind" in err &&
+        (err as { kind?: string }).kind === "auth"
+      ) {
         onLoginRequired();
         return;
       }
-      if (!response.ok) {
-        setError("Unable to load screener candidates.");
-        return;
-      }
-      const payload = (await response.json()) as ScreenSnapshot;
-      setSnapshot(payload);
-      setCandidates(payload.candidates.map((row) => ({ ...row, marginLoading: true })));
-      await loadMargins(payload.candidates);
-    } catch {
       setError("Unable to reach the local server for screener data.");
     } finally {
       setLoading(false);
     }
-  }, [loadMargins, onLoginRequired, selectedExpiry, settings, symbol]);
+  }, [onLoginRequired, selectedExpiry, settings, symbol]);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -325,10 +150,9 @@ export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerPr
   }
 
   const qualifyingCandidates = useMemo(
-    () => candidates.filter((row) => row.meetsSpread && row.meetsReturn === true),
+    () => filterQualifyingCandidates(candidates),
     [candidates],
   );
-  const marginsPending = candidates.some((row) => row.marginLoading);
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
@@ -564,7 +388,7 @@ export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerPr
 
       {snapshot?.coverage ? (
         <p className="text-sm text-zinc-600">
-          {marginsPending || loading
+          {loading
             ? `Checking return on ${snapshot.coverage.meetsSpreadMinWithBid} options at/above min spread…`
             : `${qualifyingCandidates.length} meet min spread and min return % (${snapshot.coverage.meetsSpreadMinWithBid} passed spread with a live bid).`}
         </p>
@@ -614,7 +438,7 @@ export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerPr
                 <td colSpan={9} className="px-3 py-8 text-center text-zinc-500">
                   {metaLoading
                     ? "Loading companies…"
-                    : loading || marginsPending
+                    : loading
                       ? "Screening…"
                       : snapshot
                         ? "No options meet both min spread and min return %."
@@ -623,39 +447,39 @@ export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerPr
               </tr>
             ) : (
               qualifyingCandidates.map((row, index) => (
-                  <tr
-                    key={row.id}
-                    className={index % 2 === 0 ? "bg-white" : "bg-zinc-50"}
-                  >
-                    <td className="border-b border-zinc-100 px-3 py-2 font-medium">
-                      {row.optionType === "CALL" ? "CE" : "PE"}
-                    </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
-                      {formatNumber(row.strike)}
-                    </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
-                      {formatNumber(row.lots, 0)}
-                    </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
-                      {formatPercent(row.spreadPct)}
-                    </td>
-                    <td className="border-b border-zinc-100 px-3 py-2 font-semibold text-emerald-800">
-                      {formatPercent(row.annualizedReturnPct)}
-                    </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
-                      {formatNumber(row.priceDiffInr)}
-                    </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
-                      {formatNumber(row.premium)}
-                    </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
-                      {formatNumber(row.netPremium, 0)}
-                    </td>
-                    <td className="border-b border-zinc-100 px-3 py-2">
-                      {row.marginError ? "—" : formatNumber(row.margin, 0)}
-                    </td>
-                  </tr>
-                ))
+                <tr
+                  key={row.id}
+                  className={index % 2 === 0 ? "bg-white" : "bg-zinc-50"}
+                >
+                  <td className="border-b border-zinc-100 px-3 py-2 font-medium">
+                    {row.optionType === "CALL" ? "CE" : "PE"}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.strike)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.lots, 0)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatPercent(row.spreadPct)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2 font-semibold text-emerald-800">
+                    {formatPercent(row.annualizedReturnPct)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.priceDiffInr)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.premium)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.netPremium, 0)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2">
+                    {formatNumber(row.margin, 0)}
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
