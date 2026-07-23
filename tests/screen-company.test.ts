@@ -6,6 +6,7 @@ import {
   filterQualifyingCandidates,
   listUniqueExpiries,
   runPool,
+  selectTopCandidatesBySide,
 } from "@/lib/screen-company";
 
 function candidate(partial: Partial<ScreenCandidate> & { id: string }): ScreenCandidate {
@@ -91,6 +92,81 @@ describe("filterQualifyingCandidates", () => {
       candidate({ id: "4", meetsSpread: true, meetsReturn: null }),
     ]);
     expect(rows.map((row) => row.id)).toEqual(["1"]);
+  });
+});
+
+describe("selectTopCandidatesBySide", () => {
+  it("keeps the top N calls and puts per company by annualized return", () => {
+    const rows = selectTopCandidatesBySide(
+      [
+        candidate({
+          id: "r-ce-1",
+          company: "RELIANCE",
+          optionType: "CALL",
+          strike: 3000,
+          annualizedReturnPct: 40,
+          meetsReturn: true,
+        }),
+        candidate({
+          id: "r-ce-2",
+          company: "RELIANCE",
+          optionType: "CALL",
+          strike: 3100,
+          annualizedReturnPct: 50,
+          meetsReturn: true,
+        }),
+        candidate({
+          id: "r-ce-3",
+          company: "RELIANCE",
+          optionType: "CALL",
+          strike: 3200,
+          annualizedReturnPct: 30,
+          meetsReturn: true,
+        }),
+        candidate({
+          id: "r-ce-4",
+          company: "RELIANCE",
+          optionType: "CALL",
+          strike: 3300,
+          annualizedReturnPct: 20,
+          meetsReturn: true,
+        }),
+        candidate({
+          id: "r-pe-1",
+          company: "RELIANCE",
+          optionType: "PUT",
+          strike: 2000,
+          annualizedReturnPct: 35,
+          meetsReturn: true,
+        }),
+        candidate({
+          id: "r-pe-2",
+          company: "RELIANCE",
+          optionType: "PUT",
+          strike: 1900,
+          annualizedReturnPct: 45,
+          meetsReturn: true,
+        }),
+        candidate({
+          id: "t-ce-1",
+          company: "TCS",
+          optionType: "CALL",
+          strike: 4000,
+          annualizedReturnPct: 60,
+          meetsReturn: true,
+        }),
+      ],
+      3,
+    );
+
+    expect(rows.map((row) => row.id)).toEqual([
+      "r-ce-2",
+      "r-ce-1",
+      "r-ce-3",
+      "r-pe-2",
+      "r-pe-1",
+      "t-ce-1",
+    ]);
   });
 });
 

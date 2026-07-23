@@ -1,7 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { ACCOUNT_DEFINITIONS, type AccountId } from "@/config/accounts";
+import { calendarDaysLeft, workingDaysLeft } from "@/domain/screening";
 import type {
   InvestmentReportProgress,
   InvestmentReportRow,
@@ -17,6 +25,10 @@ import {
 } from "@/lib/screen-company";
 
 const REPORT_CONCURRENCY = 2;
+const MAX_SELECTED_COMPANIES = 10;
+
+type ReportSortKey = "company" | "return";
+type ReportSortDir = "asc" | "desc";
 
 type InvestmentReportProps = {
   onLogout: () => void;
@@ -87,8 +99,16 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
   const [progress, setProgress] = useState<InvestmentReportProgress>(IDLE_PROGRESS);
   const [rows, setRows] = useState<InvestmentReportRow[]>([]);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
+  const [companySearch, setCompanySearch] = useState("");
+  const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(0);
+  const [sortKey, setSortKey] = useState<ReportSortKey>("company");
+  const [sortDir, setSortDir] = useState<ReportSortDir>("asc");
   const abortRef = useRef<AbortController | null>(null);
   const startedAtRef = useRef<number | null>(null);
+  const companyPickerRef = useRef<HTMLDivElement | null>(null);
+  const highlightOptionRef = useRef<HTMLButtonElement | null>(null);
 
   const expiries = useMemo(
     () => (meta ? listUniqueExpiries(meta.expiriesByUnderlying) : []),
@@ -112,6 +132,104 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
       selectedExpiry,
     );
   }, [meta, selectedExpiry]);
+
+  const daysToExpiry = useMemo(() => {
+    if (!selectedExpiry) {
+      return { calendar: null as number | null, working: null as number | null };
+    }
+    return {
+      calendar: calendarDaysLeft(selectedExpiry),
+      working: workingDaysLeft(selectedExpiry),
+    };
+  }, [selectedExpiry]);
+
+  const filteredCompanies = useMemo(() => {
+    const query = companySearch.trim().toUpperCase();
+    const selected = new Set(selectedCompanies);
+    const matches = query
+      ? eligibility.eligible.filter((symbol) => symbol.includes(query))
+      : eligibility.eligible;
+    return matches.filter((symbol) => !selected.has(symbol)).slice(0, 50);
+  }, [companySearch, eligibility.eligible, selectedCompanies]);
+
+  function addCompany(symbol: string) {
+    setSelectedCompanies((current) => {
+      if (current.includes(symbol) || current.length >= MAX_SELECTED_COMPANIES) {
+        return current;
+      }
+      return [...current, symbol].sort((left, right) => left.localeCompare(right));
+    });
+    setCompanySearch("");
+    setHighlightIndex(0);
+    setCompanyPickerOpen(true);
+  }
+
+  function removeCompany(symbol: string) {
+    setSelectedCompanies((current) => current.filter((item) => item !== symbol));
+  }
+
+  function handleCompanySearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setCompanyPickerOpen(false);
+      return;
+    }
+
+    if (
+      selectedCompanies.length >= MAX_SELECTED_COMPANIES ||
+      metaLoading ||
+      running ||
+      eligibility.eligible.length === 0
+    ) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setCompanyPickerOpen(true);
+      setHighlightIndex((current) => {
+        if (!companyPickerOpen || filteredCompanies.length === 0) {
+          return 0;
+        }
+        return Math.min(current + 1, filteredCompanies.length - 1);
+      });
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setCompanyPickerOpen(true);
+      setHighlightIndex((current) => Math.max(current - 1, 0));
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (!companyPickerOpen) {
+        setCompanyPickerOpen(true);
+        return;
+      }
+      const symbol =
+        filteredCompanies[highlightIndex] ?? filteredCompanies[0] ?? null;
+      if (symbol) {
+        addCompany(symbol);
+      }
+    }
+  }
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!companyPickerRef.current?.contains(event.target as Node)) {
+        setCompanyPickerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  useEffect(() => {
+    highlightOptionRef.current?.scrollIntoView({ block: "nearest" });
+  }, [highlightIndex, companyPickerOpen]);
 
   const loadMeta = useCallback(async () => {
     setMetaLoading(true);
@@ -166,10 +284,11 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
   }, [finishElapsed]);
 
   const runReport = useCallback(async () => {
-    if (!meta || !selectedExpiry || eligibility.eligible.length === 0) {
+    if (!meta || !selectedExpiry || selectedCompanies.length === 0) {
       return;
     }
 
+    const companies = selectedCompanies.slice(0, MAX_SELECTED_COMPANIES);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -181,12 +300,12 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
     setProgress({
       status: "running",
       expiryIso: selectedExpiry,
-      eligible: eligibility.eligible.length,
+      eligible: companies.length,
       skipped: eligibility.skipped,
       processed: 0,
       failed: 0,
       qualifyingCount: 0,
-      currentSymbol: eligibility.eligible[0] ?? null,
+      currentSymbol: companies[0] ?? null,
     });
 
     const collected: InvestmentReportRow[] = [];
@@ -195,7 +314,7 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
 
     try {
       await runPool(
-        eligibility.eligible,
+        companies,
         REPORT_CONCURRENCY,
         async (symbol) => {
           if (controller.signal.aborted) {
@@ -225,13 +344,13 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
               if (left.company !== right.company) {
                 return left.company.localeCompare(right.company);
               }
+              if (left.optionType !== right.optionType) {
+                return left.optionType.localeCompare(right.optionType);
+              }
               const leftReturn = left.annualizedReturnPct ?? -Infinity;
               const rightReturn = right.annualizedReturnPct ?? -Infinity;
               if (leftReturn !== rightReturn) {
                 return rightReturn - leftReturn;
-              }
-              if (left.optionType !== right.optionType) {
-                return left.optionType.localeCompare(right.optionType);
               }
               return left.strike - right.strike;
             });
@@ -306,11 +425,11 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
       }
     }
   }, [
-    eligibility.eligible,
     eligibility.skipped,
     finishElapsed,
     meta,
     onLoginRequired,
+    selectedCompanies,
     selectedExpiry,
     settings,
   ]);
@@ -323,6 +442,39 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
 
   const running = progress.status === "running";
 
+  const sortedRows = useMemo(() => {
+    const next = [...rows];
+    next.sort((left, right) => {
+      if (sortKey === "company") {
+        const companyCmp = left.company.localeCompare(right.company);
+        if (companyCmp !== 0) {
+          return sortDir === "asc" ? companyCmp : -companyCmp;
+        }
+        const leftReturn = left.annualizedReturnPct ?? -Infinity;
+        const rightReturn = right.annualizedReturnPct ?? -Infinity;
+        return rightReturn - leftReturn;
+      }
+
+      const leftReturn = left.annualizedReturnPct ?? -Infinity;
+      const rightReturn = right.annualizedReturnPct ?? -Infinity;
+      const returnCmp = leftReturn - rightReturn;
+      if (returnCmp !== 0) {
+        return sortDir === "asc" ? returnCmp : -returnCmp;
+      }
+      return left.company.localeCompare(right.company);
+    });
+    return next;
+  }, [rows, sortDir, sortKey]);
+
+  function toggleSort(nextKey: ReportSortKey) {
+    if (sortKey === nextKey) {
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(nextKey);
+    setSortDir(nextKey === "return" ? "desc" : "asc");
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
       <header className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -330,8 +482,8 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-zinc-900">Investment Report</h1>
             <p className="text-sm text-zinc-600">
-              Screen every company that lists the selected expiry with the same thresholds as the
-              screener. This can take a while because of broker rate limits.
+              Screen a short company list with the same thresholds as the screener and list every
+              option that qualifies.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -348,7 +500,7 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                 type="button"
                 onClick={() => void runReport()}
                 disabled={
-                  metaLoading || !selectedExpiry || eligibility.eligible.length === 0
+                  metaLoading || !selectedExpiry || selectedCompanies.length === 0
                 }
                 className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
               >
@@ -365,12 +517,91 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+          <div className="relative sm:col-span-2" ref={companyPickerRef}>
+            <label className="flex flex-col gap-1 text-sm text-zinc-700">
+              Companies ({selectedCompanies.length}/{MAX_SELECTED_COMPANIES})
+              <input
+                type="search"
+                value={companySearch}
+                onChange={(event) => {
+                  setCompanySearch(event.target.value);
+                  setCompanyPickerOpen(true);
+                  setHighlightIndex(0);
+                }}
+                onFocus={() => {
+                  setCompanyPickerOpen(true);
+                  setHighlightIndex(0);
+                }}
+                onKeyDown={handleCompanySearchKeyDown}
+                placeholder={
+                  selectedCompanies.length >= MAX_SELECTED_COMPANIES
+                    ? `Max ${MAX_SELECTED_COMPANIES} selected`
+                    : "Search and add…"
+                }
+                disabled={
+                  metaLoading ||
+                  running ||
+                  eligibility.eligible.length === 0 ||
+                  selectedCompanies.length >= MAX_SELECTED_COMPANIES
+                }
+                className="rounded-lg border border-zinc-300 px-2 py-1.5"
+                aria-controls="company-picker-results"
+                aria-autocomplete="list"
+              />
+            </label>
+            {companyPickerOpen &&
+            !metaLoading &&
+            eligibility.eligible.length > 0 &&
+            selectedCompanies.length < MAX_SELECTED_COMPANIES ? (
+              <div
+                id="company-picker-results"
+                role="listbox"
+                className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg"
+              >
+                {filteredCompanies.length === 0 ? (
+                  <p className="px-3 py-2 text-sm text-zinc-500">
+                    {companySearch.trim()
+                      ? `No companies match “${companySearch.trim()}”.`
+                      : "All matching companies are already selected."}
+                  </p>
+                ) : (
+                  filteredCompanies.map((symbol, index) => {
+                    const active = index === highlightIndex;
+                    return (
+                      <button
+                        key={symbol}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        ref={active ? highlightOptionRef : null}
+                        onMouseEnter={() => setHighlightIndex(index)}
+                        onClick={() => addCompany(symbol)}
+                        className={`block w-full px-3 py-2 text-left text-sm ${
+                          active
+                            ? "bg-zinc-100 text-zinc-900"
+                            : "text-zinc-800 hover:bg-zinc-50"
+                        }`}
+                      >
+                        {symbol}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </div>
           <label className="flex flex-col gap-1 text-sm text-zinc-700">
             Expiry
             <select
               value={selectedExpiry}
-              onChange={(event) => setExpiryIso(event.target.value)}
+              onChange={(event) => {
+                setExpiryIso(event.target.value);
+                setSelectedCompanies([]);
+                setCompanySearch("");
+                setCompanyPickerOpen(false);
+                setHighlightIndex(0);
+              }}
               disabled={metaLoading || running || !expiries.length}
               className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5"
             >
@@ -466,7 +697,58 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
             />
           </label>
         </div>
+
+        {selectedCompanies.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedCompanies.map((symbol) => (
+              <span
+                key={symbol}
+                className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-sm text-zinc-800"
+              >
+                {symbol}
+                <button
+                  type="button"
+                  onClick={() => removeCompany(symbol)}
+                  disabled={running}
+                  className="rounded-full px-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800 disabled:opacity-50"
+                  aria-label={`Remove ${symbol}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={() => setSelectedCompanies([])}
+              disabled={running}
+              className="text-sm text-zinc-600 underline-offset-2 hover:underline disabled:opacity-50"
+            >
+              Clear
+            </button>
+          </div>
+        ) : null}
       </header>
+
+      <details className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
+        <summary className="cursor-pointer text-sm font-medium text-zinc-800 select-none">
+          How this report works
+        </summary>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-600">
+          <li>
+            You pick up to <span className="font-medium text-zinc-800">{MAX_SELECTED_COMPANIES}</span>{" "}
+            companies that list the selected expiry. Only those companies are screened.
+          </li>
+          <li>
+            Settings (side, margin account, min spread %, min return % p.a., lots) are shared with
+            the Screener tab and use the same calculations.
+          </li>
+          <li>
+            An option only qualifies if it meets both the minimum spread and the minimum
+            annualized return after sell charges and broker margin. Every qualifying strike is
+            shown.
+          </li>
+        </ul>
+      </details>
 
       {error ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -477,18 +759,26 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
         <div className="flex flex-col gap-0.5">
           <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Eligible companies
+            Total days to expiry
           </span>
           <span className="text-lg font-semibold text-zinc-900 tabular-nums">
-            {selectedExpiry ? eligibility.eligible.length : "—"}
+            {daysToExpiry.calendar ?? "—"}
           </span>
         </div>
         <div className="flex flex-col gap-0.5">
           <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Skipped (no expiry)
+            Working days to expiry
           </span>
           <span className="text-lg font-semibold text-zinc-900 tabular-nums">
-            {selectedExpiry ? eligibility.skipped : "—"}
+            {daysToExpiry.working ?? "—"}
+          </span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+            Selected
+          </span>
+          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
+            {selectedCompanies.length}
           </span>
         </div>
         <div className="flex flex-col gap-0.5">
@@ -545,14 +835,14 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
         {metaLoading
           ? "Loading companies…"
           : running
-            ? `Scanning companies for ${formatExpiryLabel(selectedExpiry)}. Qualifying rows appear as each company finishes.`
+            ? `Scanning selected companies for ${formatExpiryLabel(selectedExpiry)}. Qualifying rows appear as each company finishes.`
             : progress.status === "completed"
               ? `${rows.length} options meet min spread and min return across ${progress.eligible - progress.failed} companies.${elapsedMs === null ? "" : ` Report took ${formatDuration(elapsedMs)} to generate.`}`
               : progress.status === "cancelled"
                 ? `Stopped after ${progress.processed} companies. ${rows.length} qualifying options kept.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
-                : selectedExpiry
-                  ? `${eligibility.eligible.length} companies list ${formatExpiryLabel(selectedExpiry)}; ${eligibility.skipped} will be skipped.`
-                  : "Choose an expiry and run the report."}
+                : selectedCompanies.length > 0
+                  ? `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"}.`
+                  : `Pick up to ${MAX_SELECTED_COMPANIES} companies, then run the report.`}
       </p>
 
       <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
@@ -561,29 +851,61 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
             <tr className="text-left text-zinc-700">
               {(
                 [
-                  { heading: "Company" },
+                  { heading: "Company", sort: "company" as const },
                   { heading: "Side" },
                   { heading: "Spot" },
                   { heading: "Strike" },
                   { heading: "Lots" },
                   { heading: "Spread %" },
-                  { heading: "Ann. return %" },
+                  { heading: "Ann. return %", sort: "return" as const },
                   { heading: "Bid" },
                   { heading: "Net premium" },
                   { heading: "Margin" },
-                ] satisfies { heading: string }[]
-              ).map(({ heading }) => (
-                <th
-                  key={heading}
-                  className="border-b border-zinc-200 px-3 py-2 font-semibold whitespace-nowrap"
-                >
-                  {heading}
-                </th>
-              ))}
+                ] satisfies { heading: string; sort?: ReportSortKey }[]
+              ).map(({ heading, sort }) => {
+                const active = Boolean(sort && sortKey === sort);
+                return (
+                  <th
+                    key={heading}
+                    aria-sort={
+                      sort
+                        ? active
+                          ? sortDir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                        : undefined
+                    }
+                    className="border-b border-zinc-200 px-3 py-2 font-semibold whitespace-nowrap"
+                  >
+                    {sort ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(sort)}
+                        className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 -mx-1.5 transition-colors ${
+                          active
+                            ? "bg-zinc-200 text-zinc-900 ring-1 ring-zinc-300"
+                            : "text-zinc-700 underline decoration-zinc-400 decoration-dotted underline-offset-4 hover:bg-zinc-100 hover:text-zinc-900"
+                        }`}
+                      >
+                        {heading}
+                        <span
+                          className={`font-normal ${active ? "text-zinc-700" : "text-zinc-400"}`}
+                          aria-hidden="true"
+                        >
+                          {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="text-zinc-700">{heading}</span>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
                   {metaLoading
@@ -592,11 +914,11 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                       ? "Screening companies…"
                       : progress.status === "completed" || progress.status === "cancelled"
                         ? "No options meet both min spread and min return %."
-                        : "Run a report for the selected expiry."}
+                        : "Pick companies and run a report."}
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => (
+              sortedRows.map((row, index) => (
                 <tr
                   key={row.id}
                   className={index % 2 === 0 ? "bg-white" : "bg-zinc-50"}

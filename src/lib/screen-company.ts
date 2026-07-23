@@ -71,6 +71,54 @@ export function filterQualifyingCandidates(
   );
 }
 
+function compareByAnnualizedReturnDesc(
+  left: ScreenCandidate,
+  right: ScreenCandidate,
+): number {
+  const leftReturn = left.annualizedReturnPct ?? -Infinity;
+  const rightReturn = right.annualizedReturnPct ?? -Infinity;
+  if (leftReturn !== rightReturn) {
+    return rightReturn - leftReturn;
+  }
+  if (left.strike !== right.strike) {
+    return left.strike - right.strike;
+  }
+  return left.fillIndex - right.fillIndex;
+}
+
+export function selectTopCandidatesBySide(
+  candidates: ScreenCandidate[],
+  topPerSide: number,
+): ScreenCandidate[] {
+  const limit = Math.max(0, Math.floor(topPerSide));
+  const byCompany = new Map<string, ScreenCandidate[]>();
+  for (const candidate of candidates) {
+    const existing = byCompany.get(candidate.company);
+    if (existing) {
+      existing.push(candidate);
+    } else {
+      byCompany.set(candidate.company, [candidate]);
+    }
+  }
+
+  const selected: ScreenCandidate[] = [];
+  for (const company of [...byCompany.keys()].sort((left, right) =>
+    left.localeCompare(right),
+  )) {
+    const rows = byCompany.get(company) ?? [];
+    const calls = rows
+      .filter((row) => row.optionType === "CALL")
+      .sort(compareByAnnualizedReturnDesc)
+      .slice(0, limit);
+    const puts = rows
+      .filter((row) => row.optionType === "PUT")
+      .sort(compareByAnnualizedReturnDesc)
+      .slice(0, limit);
+    selected.push(...calls, ...puts);
+  }
+  return selected;
+}
+
 export function companiesForExpiry(
   underlyings: string[],
   expiriesByUnderlying: Record<string, string[]>,
