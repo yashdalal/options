@@ -10,6 +10,7 @@ import type {
 } from "@/domain/types";
 import { useScreenerSettings } from "@/hooks/use-screener-settings";
 import { filterQualifyingCandidates, screenCompany } from "@/lib/screen-company";
+import { NumberInput } from "@/components/number-input";
 import { PriceRangeBars, optionSideBadgeClass, optionSideTextClass } from "@/components/price-range-bars";
 
 type OptionsScreenerProps = {
@@ -254,44 +255,31 @@ export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerPr
           </label>
           <label className="flex flex-col gap-1 text-sm text-zinc-700">
             Min spread %
-            <input
-              type="number"
+            <NumberInput
               value={settings.spreadMin}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  spreadMin: Number(event.target.value),
-                }))
+              onValueChange={(spreadMin) =>
+                setSettings((current) => ({ ...current, spreadMin }))
               }
               className="rounded-lg border border-zinc-300 px-2 py-1.5"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-zinc-700">
             Min return % p.a.
-            <input
-              type="number"
+            <NumberInput
               value={settings.returnMin}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  returnMin: Number(event.target.value),
-                }))
+              onValueChange={(returnMin) =>
+                setSettings((current) => ({ ...current, returnMin }))
               }
               className="rounded-lg border border-zinc-300 px-2 py-1.5"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-zinc-700">
             Lots
-            <input
-              type="number"
-              min={1}
+            <NumberInput
               value={settings.lots}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  lots: Math.max(1, Math.floor(Number(event.target.value) || 1)),
-                }))
-              }
+              onValueChange={(lots) => setSettings((current) => ({ ...current, lots }))}
+              min={1}
+              integer
               className="rounded-lg border border-zinc-300 px-2 py-1.5"
             />
           </label>

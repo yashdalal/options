@@ -27,6 +27,7 @@ import {
   runPool,
   screenCompany,
 } from "@/lib/screen-company";
+import { NumberInput } from "@/components/number-input";
 import { PriceRangeBars, optionSideBadgeClass, optionSideTextClass } from "@/components/price-range-bars";
 
 const REPORT_CONCURRENCY = 2;
@@ -814,14 +815,10 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
           </label>
           <label className="flex flex-col gap-1 text-sm text-zinc-700">
             Min spread %
-            <input
-              type="number"
+            <NumberInput
               value={settings.spreadMin}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  spreadMin: Number(event.target.value),
-                }))
+              onValueChange={(spreadMin) =>
+                setSettings((current) => ({ ...current, spreadMin }))
               }
               disabled={running}
               className="rounded-lg border border-zinc-300 px-2 py-1.5"
@@ -829,14 +826,10 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
           </label>
           <label className="flex flex-col gap-1 text-sm text-zinc-700">
             Min return % p.a.
-            <input
-              type="number"
+            <NumberInput
               value={settings.returnMin}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  returnMin: Number(event.target.value),
-                }))
+              onValueChange={(returnMin) =>
+                setSettings((current) => ({ ...current, returnMin }))
               }
               disabled={running}
               className="rounded-lg border border-zinc-300 px-2 py-1.5"
@@ -844,16 +837,11 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
           </label>
           <label className="flex flex-col gap-1 text-sm text-zinc-700">
             Lots
-            <input
-              type="number"
-              min={1}
+            <NumberInput
               value={settings.lots}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  lots: Math.max(1, Math.floor(Number(event.target.value) || 1)),
-                }))
-              }
+              onValueChange={(lots) => setSettings((current) => ({ ...current, lots }))}
+              min={1}
+              integer
               disabled={running}
               className="rounded-lg border border-zinc-300 px-2 py-1.5"
             />
