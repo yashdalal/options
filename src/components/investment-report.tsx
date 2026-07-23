@@ -15,6 +15,7 @@ import type {
   InvestmentReportRow,
   ScreenMeta,
   ScreenSideFilter,
+  UnderlyingPriceRanges,
 } from "@/domain/types";
 import { useScreenerSettings } from "@/hooks/use-screener-settings";
 import {
@@ -23,9 +24,10 @@ import {
   runPool,
   screenCompany,
 } from "@/lib/screen-company";
+import { PriceRangeBars, optionSideBadgeClass, optionSideTextClass } from "@/components/price-range-bars";
 
 const REPORT_CONCURRENCY = 2;
-const MAX_SELECTED_COMPANIES = 10;
+const MAX_SELECTED_COMPANIES = 30;
 
 type ReportSortKey = "company" | "return";
 type ReportSortDir = "asc" | "desc";
@@ -98,6 +100,12 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<InvestmentReportProgress>(IDLE_PROGRESS);
   const [rows, setRows] = useState<InvestmentReportRow[]>([]);
+  const [priceRangesByCompany, setPriceRangesByCompany] = useState<
+    Record<string, UnderlyingPriceRanges>
+  >({});
+  const [priceRangesErrorByCompany, setPriceRangesErrorByCompany] = useState<
+    Record<string, string>
+  >({});
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [companySearch, setCompanySearch] = useState("");
@@ -297,6 +305,8 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
 
     setError(null);
     setRows([]);
+    setPriceRangesByCompany({});
+    setPriceRangesErrorByCompany({});
     setProgress({
       status: "running",
       expiryIso: selectedExpiry,
@@ -335,6 +345,18 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
               accountId: settings.accountId,
               signal: controller.signal,
             });
+            if (result.snapshot.priceRanges) {
+              setPriceRangesByCompany((current) => ({
+                ...current,
+                [symbol]: result.snapshot.priceRanges!,
+              }));
+            }
+            if (result.snapshot.priceRangesError) {
+              setPriceRangesErrorByCompany((current) => ({
+                ...current,
+                [symbol]: result.snapshot.priceRangesError!,
+              }));
+            }
             const nextRows = result.qualifying.map((candidate) => ({
               ...candidate,
               spot: candidate.spot,
@@ -450,6 +472,9 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
         if (companyCmp !== 0) {
           return sortDir === "asc" ? companyCmp : -companyCmp;
         }
+        if (left.optionType !== right.optionType) {
+          return left.optionType.localeCompare(right.optionType);
+        }
         const leftReturn = left.annualizedReturnPct ?? -Infinity;
         const rightReturn = right.annualizedReturnPct ?? -Infinity;
         return rightReturn - leftReturn;
@@ -461,7 +486,11 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
       if (returnCmp !== 0) {
         return sortDir === "asc" ? returnCmp : -returnCmp;
       }
-      return left.company.localeCompare(right.company);
+      const companyCmp = left.company.localeCompare(right.company);
+      if (companyCmp !== 0) {
+        return companyCmp;
+      }
+      return left.optionType.localeCompare(right.optionType);
     });
     return next;
   }, [rows, sortDir, sortKey]);
@@ -851,8 +880,7 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
             <tr className="text-left text-zinc-700">
               {(
                 [
-                  { heading: "Company", sort: "company" as const },
-                  { heading: "Side" },
+                  { heading: "Setup", sort: "company" as const },
                   { heading: "Spot" },
                   { heading: "Strike" },
                   { heading: "Lots" },
@@ -896,6 +924,16 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                           {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
                         </span>
                       </button>
+                    ) : heading === "Spot" ? (
+                      <span className="inline-flex items-center gap-1.5 text-zinc-700">
+                        <span className="h-2 w-2 rounded-full bg-zinc-900" aria-hidden="true" />
+                        Spot
+                      </span>
+                    ) : heading === "Strike" ? (
+                      <span className="inline-flex items-center gap-1.5 text-zinc-700">
+                        <span className="h-2 w-2 rounded-full bg-red-600" aria-hidden="true" />
+                        Strike
+                      </span>
                     ) : (
                       <span className="text-zinc-700">{heading}</span>
                     )}
@@ -907,7 +945,7 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
           <tbody>
             {sortedRows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
+                <td colSpan={9} className="px-3 py-8 text-center text-zinc-500">
                   {metaLoading
                     ? "Loading companies…"
                     : running
@@ -921,36 +959,55 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
               sortedRows.map((row, index) => (
                 <tr
                   key={row.id}
-                  className={index % 2 === 0 ? "bg-white" : "bg-zinc-50"}
+                  className={`${index % 2 === 0 ? "bg-white" : "bg-zinc-50"} font-medium ${optionSideTextClass(row.optionType)}`}
                 >
-                  <td className="border-b border-zinc-100 px-3 py-2 font-medium">
-                    {row.company}
+                  <td className="border-b border-zinc-100 px-3 py-2.5">
+                    <div className="flex min-w-[16rem] flex-col gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{row.company}</span>
+                        <span
+                          className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ring-1 ring-inset ${optionSideBadgeClass(row.optionType)}`}
+                        >
+                          {row.optionType === "CALL" ? "Call" : "Put"}
+                        </span>
+                      </div>
+                      <PriceRangeBars
+                        ranges={priceRangesByCompany[row.company]}
+                        spot={row.spot}
+                        strike={row.strike}
+                        error={priceRangesErrorByCompany[row.company] ?? null}
+                        compact
+                      />
+                    </div>
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
-                    {row.optionType === "CALL" ? "CE" : "PE"}
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-zinc-900" aria-hidden="true" />
+                      ₹{formatNumber(row.spot)}
+                    </span>
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
-                    {formatNumber(row.spot)}
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" aria-hidden="true" />
+                      ₹{formatNumber(row.strike)}
+                    </span>
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
-                    {formatNumber(row.strike)}
-                  </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.lots, 0)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatPercent(row.spreadPct)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2 font-semibold text-emerald-800">
+                  <td className="border-b border-zinc-100 px-3 py-2 font-semibold tabular-nums">
                     {formatPercent(row.annualizedReturnPct)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.premium)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.netPremium, 0)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.margin, 0)}
                   </td>
                 </tr>

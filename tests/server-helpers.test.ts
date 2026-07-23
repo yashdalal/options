@@ -12,7 +12,7 @@ import {
   seedScripMasterRegistryMemoryCache,
 } from "@/server/kotak/scrip-master";
 import type { TradeSessionCredentials } from "@/server/kotak/auth";
-import { parseBuyDepth, resolveBestAsk, resolveBestBid } from "@/server/kotak/quotes";
+import { parseBuyDepth, resolveBestAsk, resolveBestBid, resolveYearHigh, resolveYearLow } from "@/server/kotak/quotes";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { redactValue } from "@/server/logging";
@@ -221,6 +221,37 @@ describe("quote bid/ask resolution", () => {
       { price: 0.03, quantity: 7_930_500, orders: 35 },
       { price: 0.02, quantity: 19_375_300, orders: 51 },
     ]);
+  });
+
+  it("reads 52-week high and low from quote fields", () => {
+    expect(
+      resolveYearHigh({
+        year_high: "2266",
+        year_low: "345.5",
+      }),
+    ).toBe(2266);
+    expect(
+      resolveYearLow({
+        year_high: "2266",
+        year_low: "345.5",
+      }),
+    ).toBe(345.5);
+    expect(
+      resolveYearHigh({
+        "52week_high": "920.00",
+        "52week_low": "680.00",
+      }),
+    ).toBe(920);
+    expect(
+      resolveYearLow({
+        "52week_high": "920.00",
+        "52week_low": "680.00",
+      }),
+    ).toBe(680);
+    expect(resolveYearHigh({ year_high: "0" })).toBeNull();
+    expect(resolveYearLow({ year_low: "0.00" })).toBeNull();
+    expect(resolveYearHigh({})).toBeNull();
+    expect(resolveYearLow({})).toBeNull();
   });
 });
 

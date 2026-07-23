@@ -101,6 +101,17 @@ export type ScreenCoverage = {
   meetsSpreadMinWithBid: number;
 };
 
+export type PriceBand = {
+  high: number | null;
+  low: number | null;
+};
+
+export type UnderlyingPriceRanges = {
+  oneMonth: PriceBand;
+  threeMonth: PriceBand;
+  oneYear: PriceBand;
+};
+
 export type ScreenSnapshot = {
   generatedAt: string;
   company: string;
@@ -110,6 +121,8 @@ export type ScreenSnapshot = {
   workingDaysLeft: number | null;
   coverage: ScreenCoverage | null;
   candidates: ScreenCandidate[];
+  priceRanges: UnderlyingPriceRanges | null;
+  priceRangesError: string | null;
 };
 
 export type ScreenMeta = {

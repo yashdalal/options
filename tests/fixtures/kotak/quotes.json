@@ -5,6 +5,8 @@
       "exchange_segment": "nse_cm",
       "trading_symbol": "SBIN-EQ",
       "last_traded_price": "870.00",
+      "year_high": "920.00",
+      "year_low": "680.00",
       "ohlc": {
         "open": "865.00",
         "high": "875.00",
@@ -17,6 +19,8 @@
       "exchange_segment": "nse_cm",
       "trading_symbol": "BOSCHLTD-EQ",
       "last_traded_price": "45200.00",
+      "year_high": "48000.00",
+      "year_low": "30000.00",
       "ohlc": {
         "open": "45000.00",
         "high": "45500.00",
@@ -29,6 +33,8 @@
       "exchange_segment": "nse_cm",
       "trading_symbol": "ASHOKLEY-EQ",
       "last_traded_price": "185.00",
+      "year_high": "220.00",
+      "year_low": "140.00",
       "ohlc": {
         "open": "184.00",
         "high": "186.00",

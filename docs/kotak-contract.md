@@ -45,6 +45,13 @@ Official Postman also shows quotes with a trailing `/{quote_type}` (for example 
 Use full quotes (not `/ohlc`). Prefer `ltp` / `last_traded_price` for Spot.
 `ohlc.close` is previous-day close and is only a fallback.
 
+## 52-week high / low
+
+Kotak quote payloads include `year_high` / `year_low`, but these can be **unadjusted for
+corporate actions** (e.g. KOTAKBANK returned `year_high: 2266` after a split while the
+adjusted 52-week high is ~453). This app therefore computes 1M / 3M / 1Y high–low from
+Yahoo Finance daily bars (`{SYMBOL}.NS`, `range=1y`) instead of Kotak year fields.
+
 ## Option premiums
 
 There is no dedicated option-chain endpoint. Build the chain from the daily `nse_fo` scrip master (`OPTSTK` rows with strike, expiry, lot size, CE/PE), then quote `nse_fo|{instrumentToken}`.

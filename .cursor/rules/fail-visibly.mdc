@@ -1,0 +1,12 @@
+---
+description: Prefer fail-visible behavior over stale or silent data fallbacks
+alwaysApply: true
+---
+
+# Fail visibly — never paper over bad data
+
+This app supports trading decisions. Prefer a hard failure or an explicit unavailable/error state over fallbacks that could show stale, approximate, or silently degraded numbers.
+
+Never serve expired cache after a failed fetch, chain alternate endpoints just to hide errors, or substitute a related field for a missing intended value unless the product explicitly documents that substitution.
+
+When required market data cannot be loaded: throw or return a clear error, surface it in the UI, and keep in-TTL cache for performance only — not as silent recovery.

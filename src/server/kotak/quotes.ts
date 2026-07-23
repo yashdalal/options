@@ -26,6 +26,16 @@ const quoteItemSchema = z
     ltp: z.union([z.string(), z.number()]).optional(),
     buy_price: z.union([z.string(), z.number()]).optional(),
     sell_price: z.union([z.string(), z.number()]).optional(),
+    "52week_high": z.union([z.string(), z.number()]).optional(),
+    "52week_low": z.union([z.string(), z.number()]).optional(),
+    year_high: z.union([z.string(), z.number()]).optional(),
+    year_low: z.union([z.string(), z.number()]).optional(),
+    week_52_high: z.union([z.string(), z.number()]).optional(),
+    week_52_low: z.union([z.string(), z.number()]).optional(),
+    high_52_week: z.union([z.string(), z.number()]).optional(),
+    low_52_week: z.union([z.string(), z.number()]).optional(),
+    yh: z.union([z.string(), z.number()]).optional(),
+    yl: z.union([z.string(), z.number()]).optional(),
     ohlc: z
       .object({
         open: z.union([z.string(), z.number()]).optional(),
@@ -143,6 +153,26 @@ export function resolveBestAsk(item: z.infer<typeof quoteItemSchema>): number | 
   return firstPositiveDepthPrice(item.depth?.sell) ?? toNumber(item.sell_price);
 }
 
+export function resolveYearHigh(item: z.infer<typeof quoteItemSchema>): number | null {
+  const value =
+    toNumber(item.year_high) ??
+    toNumber(item["52week_high"]) ??
+    toNumber(item.week_52_high) ??
+    toNumber(item.high_52_week) ??
+    toNumber(item.yh);
+  return value !== null && value > 0 ? value : null;
+}
+
+export function resolveYearLow(item: z.infer<typeof quoteItemSchema>): number | null {
+  const value =
+    toNumber(item.year_low) ??
+    toNumber(item["52week_low"]) ??
+    toNumber(item.week_52_low) ??
+    toNumber(item.low_52_week) ??
+    toNumber(item.yl);
+  return value !== null && value > 0 ? value : null;
+}
+
 function extractItems(payload: unknown): z.infer<typeof quoteItemSchema>[] {
   const parsed = quotesResponseSchema.safeParse(payload);
   if (!parsed.success) {
@@ -180,18 +210,17 @@ async function fetchQuoteBatch(
     .map((item) => `${item.exchangeSegment}|${toQuoteToken(item.instrumentToken)}`)
     .join(",");
 
+  const quotePath = `${session.baseUrl}/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neoSymbols)}`;
+
   const limiter = getKotakRateLimiter();
   const payload = await limiter.schedule(() =>
-    kotakFetch(
-      `${session.baseUrl}/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neoSymbols)}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: session.accessToken,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+    kotakFetch(quotePath, {
+      method: "GET",
+      headers: {
+        Authorization: session.accessToken,
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-    ),
+    }),
   );
 
   const results: InstrumentQuote[] = [];
@@ -213,6 +242,17 @@ async function fetchQuoteBatch(
     });
   }
   return results;
+}
+
+function emptyQuote(item: InstrumentRef): InstrumentQuote {
+  return {
+    instrumentToken: item.instrumentToken,
+    exchangeSegment: item.exchangeSegment,
+    ltp: null,
+    bestBid: null,
+    bestAsk: null,
+    buyDepth: [],
+  };
 }
 
 export async function fetchQuotes(
@@ -237,14 +277,7 @@ export async function fetchQuotes(
         error: error instanceof Error ? error.message : "unknown",
       });
       for (const item of batch) {
-        results.push({
-          instrumentToken: item.instrumentToken,
-          exchangeSegment: item.exchangeSegment,
-          ltp: null,
-          bestBid: null,
-          bestAsk: null,
-          buyDepth: [],
-        });
+        results.push(emptyQuote(item));
       }
     }
   }

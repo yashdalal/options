@@ -10,7 +10,7 @@ import {
 import type { ScreenCandidate, ScreenMeta, ScreenSideFilter, ScreenSnapshot } from "@/domain/types";
 import type { TradeSessionCredentials } from "./kotak/auth";
 import { checkMargin } from "./kotak/margin";
-import { fetchQuotes } from "./kotak/quotes";
+import { fetchQuotes, fetchSpotQuotes } from "./kotak/quotes";
 import {
   listExpiriesForUnderlying,
   listOptionUnderlyings,
@@ -18,6 +18,10 @@ import {
   loadScripMasterRegistry,
   resolveCashInstrument,
 } from "./kotak/scrip-master";
+import {
+  emptyPriceRanges,
+  fetchUnderlyingPriceRanges,
+} from "./market-data/yahoo-history";
 import { handleBrokerAuthFailure } from "./session";
 import { logInfo } from "./logging";
 
@@ -113,6 +117,8 @@ export async function getScreenSnapshot(
       workingDaysLeft: null,
       coverage: null,
       candidates: [],
+      priceRanges: null,
+      priceRangesError: null,
     };
   }
 
@@ -124,15 +130,29 @@ export async function getScreenSnapshot(
 
   let spot: number | null = null;
   try {
-    const spotQuotes = await fetchQuotes(session, [
+    const spotQuotes = await fetchSpotQuotes(session, [
       {
         instrumentToken: cash.instrumentToken,
         exchangeSegment: cash.exchangeSegment,
       },
     ]);
-    spot = spotQuotes[0]?.ltp ?? null;
+    spot = spotQuotes[0]?.spot ?? null;
   } catch (error) {
     handleBrokerAuthFailure(ACCOUNT_DEFINITIONS[0].id, error);
+  }
+
+  let priceRanges = emptyPriceRanges();
+  let priceRangesError: string | null = null;
+  try {
+    priceRanges = await fetchUnderlyingPriceRanges(company);
+  } catch (error) {
+    priceRangesError =
+      error instanceof Error ? error.message : "Failed to load price ranges";
+    logInfo("Price range fetch failed", {
+      requestId,
+      symbol: company,
+      error: priceRangesError,
+    });
   }
 
   if (spot === null || !(spot > 0)) {
@@ -145,6 +165,8 @@ export async function getScreenSnapshot(
       workingDaysLeft: tradingDaysLeft,
       coverage: null,
       candidates: [],
+      priceRanges,
+      priceRangesError,
     };
   }
 
@@ -249,6 +271,8 @@ export async function getScreenSnapshot(
       meetsSpreadMinWithBid,
     },
     candidates,
+    priceRanges,
+    priceRangesError,
   };
 }
 

@@ -10,6 +10,7 @@ import type {
 } from "@/domain/types";
 import { useScreenerSettings } from "@/hooks/use-screener-settings";
 import { filterQualifyingCandidates, screenCompany } from "@/lib/screen-company";
+import { PriceRangeBars, optionSideBadgeClass, optionSideTextClass } from "@/components/price-range-bars";
 
 type OptionsScreenerProps = {
   onLogout: () => void;
@@ -310,6 +311,13 @@ export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerPr
             {formatNumber(snapshot?.spot)}
           </span>
         </div>
+        {snapshot?.priceRanges || snapshot?.priceRangesError ? (
+          <PriceRangeBars
+            ranges={snapshot.priceRanges}
+            spot={snapshot.spot}
+            error={snapshot.priceRangesError}
+          />
+        ) : null}
         <div className="flex flex-col gap-0.5">
           <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
             Total days to expiry
@@ -449,33 +457,37 @@ export function OptionsScreener({ onLogout, onLoginRequired }: OptionsScreenerPr
               qualifyingCandidates.map((row, index) => (
                 <tr
                   key={row.id}
-                  className={index % 2 === 0 ? "bg-white" : "bg-zinc-50"}
+                  className={`${index % 2 === 0 ? "bg-white" : "bg-zinc-50"} font-medium ${optionSideTextClass(row.optionType)}`}
                 >
-                  <td className="border-b border-zinc-100 px-3 py-2 font-medium">
-                    {row.optionType === "CALL" ? "CE" : "PE"}
-                  </td>
                   <td className="border-b border-zinc-100 px-3 py-2">
+                    <span
+                      className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ring-1 ring-inset ${optionSideBadgeClass(row.optionType)}`}
+                    >
+                      {row.optionType === "CALL" ? "Call" : "Put"}
+                    </span>
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.strike)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.lots, 0)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatPercent(row.spreadPct)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2 font-semibold text-emerald-800">
+                  <td className="border-b border-zinc-100 px-3 py-2 font-semibold tabular-nums">
                     {formatPercent(row.annualizedReturnPct)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.priceDiffInr)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.premium)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.netPremium, 0)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2">
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.margin, 0)}
                   </td>
                 </tr>
