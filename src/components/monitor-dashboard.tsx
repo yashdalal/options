@@ -10,7 +10,6 @@ const SHOW_NEAR_ONLY_KEY = "near_expiry_show_near_only";
 type MonitorDashboardProps = {
   active?: boolean;
   highlightDefault: number;
-  onLogout: () => void;
   onLoginRequired: () => void;
 };
 
@@ -135,7 +134,6 @@ function SideCells({
 export function MonitorDashboard({
   active = true,
   highlightDefault,
-  onLogout,
   onLoginRequired,
 }: MonitorDashboardProps) {
   const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
@@ -256,11 +254,6 @@ export function MonitorDashboard({
     setExpandedRows(new Set());
   }, [selectedExpiry, snapshot?.generatedAt]);
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    onLogout();
-  }
-
   function toggleRow(key: string) {
     setExpandedRows((current) => {
       const next = new Set(current);
@@ -331,13 +324,6 @@ export function MonitorDashboard({
               className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
             >
               {loading ? "Refreshing…" : "Refresh"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-            >
-              Logout
             </button>
           </div>
         </div>

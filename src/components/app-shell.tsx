@@ -56,6 +56,11 @@ export function AppShell() {
     void loadStatus();
   }, [loadStatus]);
 
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    await loadStatus();
+  }
+
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-100 text-sm text-zinc-600">
@@ -101,7 +106,7 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-zinc-100">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-0 px-4 pt-4 sm:px-6">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pt-4 sm:px-6">
         <div
           className="flex gap-2"
           role="tablist"
@@ -134,20 +139,23 @@ export function AppShell() {
             Investment Report
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => void logout()}
+          className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+        >
+          Logout
+        </button>
       </div>
       <div className={tab === "monitor" ? undefined : "hidden"}>
         <MonitorDashboard
           active={tab === "monitor"}
           highlightDefault={auth.highlightDefault}
-          onLogout={() => void loadStatus()}
           onLoginRequired={() => void loadStatus()}
         />
       </div>
       <div className={tab === "report" ? undefined : "hidden"}>
-        <InvestmentReport
-          onLogout={() => void loadStatus()}
-          onLoginRequired={() => void loadStatus()}
-        />
+        <InvestmentReport onLoginRequired={() => void loadStatus()} />
       </div>
     </div>
   );

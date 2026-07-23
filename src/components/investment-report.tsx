@@ -37,7 +37,6 @@ type ReportSortKey = "company" | "return";
 type ReportSortDir = "asc" | "desc";
 
 type InvestmentReportProps = {
-  onLogout: () => void;
   onLoginRequired: () => void;
 };
 
@@ -125,7 +124,7 @@ const IDLE_PROGRESS: InvestmentReportProgress = {
   currentSymbol: null,
 };
 
-export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReportProps) {
+export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   const [settings, setSettings] = useScreenerSettings();
   const [meta, setMeta] = useState<ScreenMeta | null>(null);
   const [expiryIso, setExpiryIso] = useState("");
@@ -152,6 +151,7 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
   const [highlightIndex, setHighlightIndex] = useState(0);
   const [sortKey, setSortKey] = useState<ReportSortKey>("company");
   const [sortDir, setSortDir] = useState<ReportSortDir>("asc");
+  const [helpOpen, setHelpOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const startedAtRef = useRef<number | null>(null);
   const companyPickerRef = useRef<HTMLDivElement | null>(null);
@@ -317,6 +317,19 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
   useEffect(() => {
     highlightOptionRef.current?.scrollIntoView({ block: "nearest" });
   }, [highlightIndex, companyPickerOpen]);
+
+  useEffect(() => {
+    if (!helpOpen) {
+      return;
+    }
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setHelpOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [helpOpen]);
 
   const loadMeta = useCallback(async () => {
     setMetaLoading(true);
@@ -605,7 +618,14 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
             <h1 className="text-xl font-semibold text-zinc-900">Investment Report</h1>
             <p className="text-sm text-zinc-600">
               Screen a short company list and list every option that meets min spread and min
-              annualized return.
+              annualized return.{" "}
+              <button
+                type="button"
+                onClick={() => setHelpOpen(true)}
+                className="font-medium text-zinc-800 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+              >
+                How it works
+              </button>
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -629,13 +649,6 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                 Run report
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-            >
-              Logout
-            </button>
           </div>
         </div>
 
@@ -879,75 +892,101 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
         ) : null}
       </header>
 
-      <details className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
-        <summary className="cursor-pointer text-sm font-medium text-zinc-800 select-none">
-          How this report works
-        </summary>
-        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-600">
-          <li>
-            Pick companies first or pick an expiry first. With companies selected, the expiry
-            list only shows dates that{" "}
-            <span className="font-medium text-zinc-800">every</span> selected name lists — so
-            changing expiry never drops names from the selection.
-          </li>
-          <li>
-            You can select up to{" "}
-            <span className="font-medium text-zinc-800">{MAX_SELECTED_COMPANIES}</span>{" "}
-            companies. Only names that list the chosen expiry can be added for that run.
-          </li>
-          <li>
-            An option only qualifies if it meets both the minimum spread and the minimum
-            annualized return after sell charges and broker margin. Every qualifying strike is
-            shown.
-          </li>
-        </ul>
-      </details>
-
-      <details className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
-        <summary className="cursor-pointer text-sm font-medium text-zinc-800 select-none">
-          Calculation formulas
-        </summary>
-        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <dt className="font-medium text-zinc-800">Spread % (CE)</dt>
-            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">
-              ((strike − spot) / spot) × 100
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1">
-            <dt className="font-medium text-zinc-800">Spread % (PE)</dt>
-            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">
-              ((spot − strike) / spot) × 100
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1">
-            <dt className="font-medium text-zinc-800">Diff ₹</dt>
-            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">|strike − spot|</dd>
-          </div>
-          <div className="flex flex-col gap-1">
-            <dt className="font-medium text-zinc-800">Total net premium</dt>
-            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">
-              premium turnover − sell charges
-            </dd>
-            <dd className="text-xs text-zinc-500">
-              Charges: ₹10 brokerage/order + STT 0.15% + exchange ~0.03503% + SEBI 0.0001%; GST
-              18% on (brokerage + exchange + SEBI)
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1">
-            <dt className="font-medium text-zinc-800">Ann. return %</dt>
-            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">
-              (net premium / margin) × (365 / calendar days) × 100
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1">
-            <dt className="font-medium text-zinc-800">Bid / Margin</dt>
-            <dd className="text-xs text-zinc-600 sm:text-sm">
-              Bid from order-book buy depth; margin from broker check-margin API
-            </dd>
-          </div>
-        </dl>
-      </details>
+      {helpOpen ? (
+        <div className="fixed inset-0 z-40 flex justify-end">
+          <button
+            type="button"
+            aria-label="Close help panel"
+            className="absolute inset-0 bg-zinc-900/25"
+            onClick={() => setHelpOpen(false)}
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="report-help-title"
+            className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white shadow-xl"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <h2 id="report-help-title" className="text-base font-semibold text-zinc-900">
+                Report help
+              </h2>
+              <button
+                type="button"
+                onClick={() => setHelpOpen(false)}
+                className="rounded-lg border border-zinc-300 px-2.5 py-1 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex-1 space-y-8 overflow-y-auto px-4 py-4">
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-zinc-900">How this report works</h3>
+                <ul className="list-disc space-y-2 pl-5 text-sm text-zinc-600">
+                  <li>
+                    Pick companies first or pick an expiry first. With companies selected, the
+                    expiry list only shows dates that{" "}
+                    <span className="font-medium text-zinc-800">every</span> selected name lists —
+                    so changing expiry never drops names from the selection.
+                  </li>
+                  <li>
+                    You can select up to{" "}
+                    <span className="font-medium text-zinc-800">{MAX_SELECTED_COMPANIES}</span>{" "}
+                    companies. Only names that list the chosen expiry can be added for that run.
+                  </li>
+                  <li>
+                    An option only qualifies if it meets both the minimum spread and the minimum
+                    annualized return after sell charges and broker margin. Every qualifying
+                    strike is shown.
+                  </li>
+                </ul>
+              </section>
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-zinc-900">Calculation formulas</h3>
+                <dl className="grid gap-3 text-sm">
+                  <div className="flex flex-col gap-1">
+                    <dt className="font-medium text-zinc-800">Spread % (CE)</dt>
+                    <dd className="font-mono text-xs text-zinc-600">
+                      ((strike − spot) / spot) × 100
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <dt className="font-medium text-zinc-800">Spread % (PE)</dt>
+                    <dd className="font-mono text-xs text-zinc-600">
+                      ((spot − strike) / spot) × 100
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <dt className="font-medium text-zinc-800">Diff ₹</dt>
+                    <dd className="font-mono text-xs text-zinc-600">|strike − spot|</dd>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <dt className="font-medium text-zinc-800">Total net premium</dt>
+                    <dd className="font-mono text-xs text-zinc-600">
+                      premium turnover − sell charges
+                    </dd>
+                    <dd className="text-xs text-zinc-500">
+                      Charges: ₹10 brokerage/order + STT 0.15% + exchange ~0.03503% + SEBI
+                      0.0001%; GST 18% on (brokerage + exchange + SEBI)
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <dt className="font-medium text-zinc-800">Ann. return %</dt>
+                    <dd className="font-mono text-xs text-zinc-600">
+                      (net premium / margin) × (365 / calendar days) × 100
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <dt className="font-medium text-zinc-800">Bid / Margin</dt>
+                    <dd className="text-xs text-zinc-600">
+                      Bid from order-book buy depth; margin from broker check-margin API
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            </div>
+          </aside>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
