@@ -22,6 +22,7 @@ import { useScreenerSettings } from "@/hooks/use-screener-settings";
 import { formatNumber, formatPercent, formatRupees } from "@/lib/format";
 import {
   companiesForExpiry,
+  companyChoiceLabel,
   filterCompanyChoices,
   listExpiriesForSelection,
   listUniqueExpiries,
@@ -33,6 +34,7 @@ import { PriceRangeBars, optionSideBadgeClass, optionSideTextClass } from "@/com
 
 const REPORT_CONCURRENCY = 2;
 const MAX_SELECTED_COMPANIES = 30;
+const EMPTY_NAME_BY_UNDERLYING: Record<string, string> = {};
 
 type ReportSortKey = "company" | "return";
 type ReportSortDir = "asc" | "desc";
@@ -176,6 +178,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     };
   }, [selectedExpiry]);
 
+  const nameByUnderlying = meta?.nameByUnderlying ?? EMPTY_NAME_BY_UNDERLYING;
+
   const companyChoices = useMemo(
     () =>
       filterCompanyChoices(
@@ -186,12 +190,14 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         meta?.underlyings ?? eligibility.eligible,
         meta?.expiriesByUnderlying ?? {},
         selectedExpiry,
+        nameByUnderlying,
       ),
     [
       companySearch,
       eligibility.eligible,
       meta?.expiriesByUnderlying,
       meta?.underlyings,
+      nameByUnderlying,
       selectedCompanies,
       selectedExpiry,
     ],
@@ -683,6 +689,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   <>
                     {filteredCompanies.map((symbol, index) => {
                       const active = index === highlightIndex;
+                      const name = nameByUnderlying[symbol];
                       return (
                         <button
                           key={symbol}
@@ -698,7 +705,12 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                               : "text-zinc-800 hover:bg-zinc-50"
                           }`}
                         >
-                          {symbol}
+                          <span className="font-medium">{symbol}</span>
+                          {name ? (
+                            <span className="mt-0.5 block text-xs text-zinc-500">
+                              {name}
+                            </span>
+                          ) : null}
                         </button>
                       );
                     })}
@@ -715,6 +727,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                                 item.expiryIso,
                               ),
                             );
+                          const name = nameByUnderlying[item.symbol];
                           return (
                             <button
                               key={`${item.symbol}-${item.expiryIso}`}
@@ -723,6 +736,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                               className="block w-full px-3 py-2 text-left text-sm text-zinc-800 hover:bg-zinc-50"
                             >
                               <span className="font-medium">{item.symbol}</span>
+                              {name ? (
+                                <span className="mt-0.5 block text-xs text-zinc-500">
+                                  {name}
+                                </span>
+                              ) : null}
                               <span className="mt-0.5 block text-xs text-zinc-500">
                                 {keepsSelection
                                   ? `${formatExpiryLabel(item.expiryIso)} — keep current selection`
@@ -845,14 +863,15 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
               <span
                 key={symbol}
                 className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-sm text-zinc-800"
+                title={companyChoiceLabel(symbol, nameByUnderlying)}
               >
-                {symbol}
+                {companyChoiceLabel(symbol, nameByUnderlying)}
                 <button
                   type="button"
                   onClick={() => removeCompany(symbol)}
                   disabled={running}
                   className="rounded-full px-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800 disabled:opacity-50"
-                  aria-label={`Remove ${symbol}`}
+                  aria-label={`Remove ${companyChoiceLabel(symbol, nameByUnderlying)}`}
                 >
                   ×
                 </button>

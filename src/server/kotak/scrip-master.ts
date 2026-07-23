@@ -20,6 +20,7 @@ export type ScripInstrument = {
   instrumentToken: string;
   tradingSymbol: string;
   underlying: string;
+  name: string | null;
   instrumentType: string;
   optionType: "CALL" | "PUT" | null;
   strike: number | null;
@@ -32,6 +33,7 @@ export type ScripMasterRegistry = {
   asOfDate: string;
   byToken: Map<string, ScripInstrument>;
   cashBySymbol: Map<string, ScripInstrument>;
+  nameByUnderlying: Map<string, string>;
   optionUnderlyings: string[];
   optionsByUnderlying: Map<string, ScripInstrument[]>;
 };
@@ -41,7 +43,7 @@ const CACHE_DIR =
     ? path.join(os.tmpdir(), "near-expiry", "scrip-master")
     : path.join(process.cwd(), ".cache", "scrip-master");
 
-const SCRIP_REGISTRY_BUILD = 4;
+const SCRIP_REGISTRY_BUILD = 5;
 
 const SCRIP_SEGMENTS = ["nse_fo", "nse_cm", "bse_fo", "bse_cm"] as const;
 type ScripSegment = (typeof SCRIP_SEGMENTS)[number];
@@ -263,6 +265,7 @@ export function parseScripCsv(
     "underlying",
     "name",
   ]);
+  const nameIdx = index(["pdesc", "description", "companyname", "company_name"]);
   const typeIdx = index([
     "pinstrumenttype",
     "pinsttype",
@@ -296,12 +299,19 @@ export function parseScripCsv(
     const optionType =
       parseOptionType(optionIdx >= 0 ? cells[optionIdx] : undefined) ??
       parseOptionType(instrumentType);
+    const underlying =
+      (underlyingIdx >= 0 ? cells[underlyingIdx] : tradingSymbol.split("-")[0]) ||
+      tradingSymbol;
+    const rawName = nameIdx >= 0 ? cells[nameIdx]?.trim() : "";
+    const name =
+      rawName && rawName.toUpperCase() !== underlying.toUpperCase() ? rawName : null;
 
     instruments.push({
       exchangeSegment,
       instrumentToken: token,
       tradingSymbol,
-      underlying: (underlyingIdx >= 0 ? cells[underlyingIdx] : tradingSymbol.split("-")[0]) || tradingSymbol,
+      underlying,
+      name,
       instrumentType,
       optionType,
       strike: parseStrike(strikeIdx >= 0 ? cells[strikeIdx] : undefined),
@@ -366,9 +376,24 @@ function isScreenableOption(instrument: ScripInstrument): boolean {
   );
 }
 
+function setUnderlyingName(
+  nameByUnderlying: Map<string, string>,
+  underlying: string,
+  name: string | null,
+): void {
+  if (!name) {
+    return;
+  }
+  const key = underlying.toUpperCase();
+  if (!nameByUnderlying.has(key)) {
+    nameByUnderlying.set(key, name);
+  }
+}
+
 function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripMasterRegistry {
   const byToken = new Map<string, ScripInstrument>();
   const cashBySymbol = new Map<string, ScripInstrument>();
+  const nameByUnderlying = new Map<string, string>();
   const optionsByUnderlying = new Map<string, ScripInstrument[]>();
 
   for (const instrument of instruments) {
@@ -377,6 +402,8 @@ function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripM
       setPreferredCashSymbol(cashBySymbol, instrument.underlying.toUpperCase(), instrument);
       const withoutSuffix = instrument.tradingSymbol.replace(/-EQ$/i, "").toUpperCase();
       setPreferredCashSymbol(cashBySymbol, withoutSuffix, instrument);
+      setUnderlyingName(nameByUnderlying, instrument.underlying, instrument.name);
+      setUnderlyingName(nameByUnderlying, withoutSuffix, instrument.name);
     }
     if (isScreenableOption(instrument)) {
       const key = instrument.underlying.toUpperCase();
@@ -386,6 +413,7 @@ function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripM
       } else {
         optionsByUnderlying.set(key, [instrument]);
       }
+      setUnderlyingName(nameByUnderlying, key, instrument.name);
     }
   }
 
@@ -393,7 +421,14 @@ function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripM
     .filter((symbol) => cashBySymbol.has(symbol))
     .sort((left, right) => left.localeCompare(right));
 
-  return { asOfDate, byToken, cashBySymbol, optionUnderlyings, optionsByUnderlying };
+  return {
+    asOfDate,
+    byToken,
+    cashBySymbol,
+    nameByUnderlying,
+    optionUnderlyings,
+    optionsByUnderlying,
+  };
 }
 
 export function buildScripMasterRegistryFromInstruments(
@@ -569,6 +604,19 @@ export function resolveCashInstrument(
 
 export function listOptionUnderlyings(registry: ScripMasterRegistry): string[] {
   return registry.optionUnderlyings;
+}
+
+export function listUnderlyingNames(
+  registry: ScripMasterRegistry,
+): Record<string, string> {
+  const names: Record<string, string> = {};
+  for (const symbol of registry.optionUnderlyings) {
+    const name = registry.nameByUnderlying.get(symbol);
+    if (name) {
+      names[symbol] = name;
+    }
+  }
+  return names;
 }
 
 /** Sensex weeklies go far out; report/screener only need this month and next (IST). */

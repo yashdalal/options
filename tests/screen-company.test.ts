@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ScreenCandidate } from "@/domain/types";
 import {
   companiesForExpiry,
+  companyChoiceLabel,
   enrichCandidatesWithMargins,
   filterCompanyChoices,
   filterQualifyingCandidates,
@@ -56,12 +57,50 @@ describe("companiesForExpiry", () => {
 
 describe("filterCompanyChoices", () => {
   const eligible = ["ACC", "ASIANPAINT", "NIFTY", "RELIANCE", "TCS"];
+  const names = {
+    ACC: "ACC LIMITED",
+    ASIANPAINT: "ASIAN PAINTS LIMITED",
+    NIFTY: "NIFTY 50",
+    RELIANCE: "RELIANCE INDUSTRIES LIMITED",
+    TCS: "TATA CONSULTANCY SERVICES LIMITED",
+  };
 
   it("searches the full eligible list and ranks prefix matches first", () => {
     const result = filterCompanyChoices(eligible, [], "NIF", 2);
     expect(result.matches).toEqual(["NIFTY"]);
     expect(result.truncated).toBe(false);
     expect(result.otherExpiryMatches).toEqual([]);
+  });
+
+  it("matches and ranks human-readable company names", () => {
+    const result = filterCompanyChoices(
+      eligible,
+      [],
+      "asian paint",
+      50,
+      eligible,
+      {},
+      "",
+      names,
+    );
+    expect(result.matches).toEqual(["ASIANPAINT"]);
+  });
+
+  it("ranks symbol prefix matches ahead of name matches", () => {
+    const result = filterCompanyChoices(
+      ["TCS", "TATASTEEL"],
+      [],
+      "TATA",
+      50,
+      ["TCS", "TATASTEEL"],
+      {},
+      "",
+      {
+        TCS: "TATA CONSULTANCY SERVICES LIMITED",
+        TATASTEEL: "TATA STEEL LIMITED",
+      },
+    );
+    expect(result.matches).toEqual(["TATASTEEL", "TCS"]);
   });
 
   it("truncates only the empty-query browse list", () => {
@@ -84,6 +123,7 @@ describe("filterCompanyChoices", () => {
         TCS: ["2026-07-28"],
       },
       "2026-07-28",
+      { NIFTY: "NIFTY 50" },
       new Date("2026-07-23T06:30:00Z"),
     );
     expect(result.matches).toEqual([]);
@@ -92,6 +132,21 @@ describe("filterCompanyChoices", () => {
       { symbol: "NIFTY", expiryIso: "2026-07-30" },
       { symbol: "NIFTY", expiryIso: "2026-08-06" },
     ]);
+  });
+});
+
+describe("companyChoiceLabel", () => {
+  it("appends the human-readable name when present", () => {
+    expect(
+      companyChoiceLabel("RELIANCE", {
+        RELIANCE: "RELIANCE INDUSTRIES LIMITED",
+      }),
+    ).toBe("RELIANCE — RELIANCE INDUSTRIES LIMITED");
+  });
+
+  it("falls back to the symbol when no distinct name exists", () => {
+    expect(companyChoiceLabel("NIFTY", {})).toBe("NIFTY");
+    expect(companyChoiceLabel("NIFTY", { NIFTY: "NIFTY" })).toBe("NIFTY");
   });
 });
 
