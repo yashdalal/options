@@ -32,6 +32,7 @@ export function LoginForm({ accounts, onStatusChange }: LoginFormProps) {
   const [totps, setTotps] = useState<TotpMap>(emptyTotps);
   const [accountErrors, setAccountErrors] = useState<Partial<Record<AccountId, string>>>({});
   const [pendingAccountId, setPendingAccountId] = useState<AccountId | null>(null);
+  const [justConnected, setJustConnected] = useState<Partial<Record<AccountId, true>>>({});
 
   const accountStatuses = useMemo(() => {
     const byId = new Map(accounts.map((account) => [account.accountId, account]));
@@ -78,6 +79,7 @@ export function LoginForm({ accounts, onStatusChange }: LoginFormProps) {
       const result = payload.accounts?.find((account) => account.accountId === accountId);
       if (result?.status === "connected") {
         setTotps((current) => ({ ...current, [accountId]: "" }));
+        setJustConnected((current) => ({ ...current, [accountId]: true }));
       } else {
         setAccountErrors((current) => ({
           ...current,
@@ -146,7 +148,11 @@ export function LoginForm({ accounts, onStatusChange }: LoginFormProps) {
             </div>
 
             {connected ? (
-              <p className="text-sm text-emerald-700">Already signed in for this account.</p>
+              <p className="text-sm text-emerald-700">
+                {justConnected[account.accountId]
+                  ? "Login successful."
+                  : "Already signed in for this account."}
+              </p>
             ) : (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input

@@ -12,9 +12,25 @@ import {
 
 export async function GET(): Promise<Response> {
   const cookieStore = await cookies();
-  const cookieSessionId = cookieStore.get(getSessionCookieName())?.value;
   const activeSessionId = getActiveSessionId();
   const state = getSessionState();
+  let cookieSessionId = cookieStore.get(getSessionCookieName())?.value;
+
+  if (
+    state.status === "ready" &&
+    activeSessionId &&
+    cookieSessionId !== activeSessionId
+  ) {
+    cookieStore.set(getSessionCookieName(), activeSessionId, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 12,
+    });
+    cookieSessionId = activeSessionId;
+  }
+
   const cookieMatches =
     Boolean(cookieSessionId) &&
     Boolean(activeSessionId) &&
