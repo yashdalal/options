@@ -7,7 +7,13 @@ import {
   workingDaysLeft,
   type ScreenableOption,
 } from "@/domain/screening";
-import type { ScreenCandidate, ScreenMeta, ScreenSideFilter, ScreenSnapshot } from "@/domain/types";
+import type {
+  BoardMeetingInfo,
+  ScreenCandidate,
+  ScreenMeta,
+  ScreenSideFilter,
+  ScreenSnapshot,
+} from "@/domain/types";
 import type { TradeSessionCredentials } from "./kotak/auth";
 import { checkMargin } from "./kotak/margin";
 import { fetchQuotes, fetchSpotQuotes } from "./kotak/quotes";
@@ -18,12 +24,29 @@ import {
   loadScripMasterRegistry,
   resolveCashInstrument,
 } from "./kotak/scrip-master";
+import { getNextBoardMeeting } from "./market-data/nse-board-meetings";
 import {
   emptyPriceRanges,
   fetchUnderlyingPriceRanges,
 } from "./market-data/yahoo-history";
-import { handleBrokerAuthFailure } from "./session";
 import { logInfo } from "./logging";
+import { handleBrokerAuthFailure } from "./session";
+
+async function loadBoardMeeting(company: string): Promise<{
+  boardMeeting: BoardMeetingInfo | null;
+  boardMeetingError: string | null;
+}> {
+  try {
+    const meeting = await getNextBoardMeeting(company);
+    return { boardMeeting: meeting, boardMeetingError: null };
+  } catch (error) {
+    return {
+      boardMeeting: null,
+      boardMeetingError:
+        error instanceof Error ? error.message : "Failed to load board meeting",
+    };
+  }
+}
 
 export type ScreenQuery = {
   symbol: string;
@@ -108,6 +131,7 @@ export async function getScreenSnapshot(
   const company = query.symbol.toUpperCase();
   const cash = resolveCashInstrument(registry, company);
   if (!cash) {
+    const board = await loadBoardMeeting(company);
     return {
       generatedAt: new Date().toISOString(),
       company,
@@ -119,6 +143,8 @@ export async function getScreenSnapshot(
       candidates: [],
       priceRanges: null,
       priceRangesError: null,
+      boardMeeting: board.boardMeeting,
+      boardMeetingError: board.boardMeetingError,
     };
   }
 
@@ -155,6 +181,15 @@ export async function getScreenSnapshot(
     });
   }
 
+  const board = await loadBoardMeeting(company);
+  if (board.boardMeetingError) {
+    logInfo("Board meeting fetch failed", {
+      requestId,
+      symbol: company,
+      error: board.boardMeetingError,
+    });
+  }
+
   if (spot === null || !(spot > 0)) {
     return {
       generatedAt: new Date().toISOString(),
@@ -167,6 +202,8 @@ export async function getScreenSnapshot(
       candidates: [],
       priceRanges,
       priceRangesError,
+      boardMeeting: board.boardMeeting,
+      boardMeetingError: board.boardMeetingError,
     };
   }
 
@@ -273,6 +310,8 @@ export async function getScreenSnapshot(
     candidates,
     priceRanges,
     priceRangesError,
+    boardMeeting: board.boardMeeting,
+    boardMeetingError: board.boardMeetingError,
   };
 }
 

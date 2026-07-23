@@ -112,6 +112,12 @@ export type UnderlyingPriceRanges = {
   oneYear: PriceBand;
 };
 
+export type BoardMeetingInfo = {
+  dateIso: string;
+  purpose: string;
+  description: string;
+};
+
 export type ScreenSnapshot = {
   generatedAt: string;
   company: string;
@@ -123,6 +129,8 @@ export type ScreenSnapshot = {
   candidates: ScreenCandidate[];
   priceRanges: UnderlyingPriceRanges | null;
   priceRangesError: string | null;
+  boardMeeting: BoardMeetingInfo | null;
+  boardMeetingError: string | null;
 };
 
 export type ScreenMeta = {

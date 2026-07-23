@@ -11,6 +11,7 @@ import {
 import { ACCOUNT_DEFINITIONS, type AccountId } from "@/config/accounts";
 import { calendarDaysLeft, workingDaysLeft } from "@/domain/screening";
 import type {
+  BoardMeetingInfo,
   InvestmentReportProgress,
   InvestmentReportRow,
   ScreenMeta,
@@ -67,6 +68,35 @@ function formatExpiryLabel(expiryIso: string): string {
   });
 }
 
+function formatBoardMeetingDate(dateIso: string): string {
+  return formatExpiryLabel(dateIso);
+}
+
+function BoardMeetingCell({
+  meeting,
+  error,
+}: {
+  meeting: BoardMeetingInfo | undefined;
+  error: string | undefined;
+}) {
+  if (error) {
+    return (
+      <span className="text-rose-700" title={error}>
+        Unavailable
+      </span>
+    );
+  }
+  if (!meeting) {
+    return <span className="text-zinc-400">—</span>;
+  }
+  const tooltip = [meeting.purpose, meeting.description].filter(Boolean).join(" — ");
+  return (
+    <span className="tabular-nums" title={tooltip || undefined}>
+      {formatBoardMeetingDate(meeting.dateIso)}
+    </span>
+  );
+}
+
 function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -104,6 +134,12 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
     Record<string, UnderlyingPriceRanges>
   >({});
   const [priceRangesErrorByCompany, setPriceRangesErrorByCompany] = useState<
+    Record<string, string>
+  >({});
+  const [boardMeetingByCompany, setBoardMeetingByCompany] = useState<
+    Record<string, BoardMeetingInfo>
+  >({});
+  const [boardMeetingErrorByCompany, setBoardMeetingErrorByCompany] = useState<
     Record<string, string>
   >({});
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
@@ -307,6 +343,8 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
     setRows([]);
     setPriceRangesByCompany({});
     setPriceRangesErrorByCompany({});
+    setBoardMeetingByCompany({});
+    setBoardMeetingErrorByCompany({});
     setProgress({
       status: "running",
       expiryIso: selectedExpiry,
@@ -355,6 +393,18 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
               setPriceRangesErrorByCompany((current) => ({
                 ...current,
                 [symbol]: result.snapshot.priceRangesError!,
+              }));
+            }
+            if (result.snapshot.boardMeeting) {
+              setBoardMeetingByCompany((current) => ({
+                ...current,
+                [symbol]: result.snapshot.boardMeeting!,
+              }));
+            }
+            if (result.snapshot.boardMeetingError) {
+              setBoardMeetingErrorByCompany((current) => ({
+                ...current,
+                [symbol]: result.snapshot.boardMeetingError!,
               }));
             }
             const nextRows = result.qualifying.map((candidate) => ({
@@ -889,6 +939,7 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                   { heading: "Bid" },
                   { heading: "Net premium" },
                   { heading: "Margin" },
+                  { heading: "Board meeting" },
                 ] satisfies { heading: string; sort?: ReportSortKey }[]
               ).map(({ heading, sort }) => {
                 const active = Boolean(sort && sortKey === sort);
@@ -945,7 +996,7 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
           <tbody>
             {sortedRows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-zinc-500">
+                <td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
                   {metaLoading
                     ? "Loading companies…"
                     : running
@@ -1009,6 +1060,12 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.margin, 0)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2.5 whitespace-nowrap">
+                    <BoardMeetingCell
+                      meeting={boardMeetingByCompany[row.company]}
+                      error={boardMeetingErrorByCompany[row.company]}
+                    />
                   </td>
                 </tr>
               ))
