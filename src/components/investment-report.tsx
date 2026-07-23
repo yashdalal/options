@@ -84,7 +84,7 @@ function BoardMeetingCell({
   if (error) {
     return (
       <span className="text-rose-700" title={error}>
-        Unavailable
+        —
       </span>
     );
   }
