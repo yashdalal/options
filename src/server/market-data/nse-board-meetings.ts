@@ -35,7 +35,6 @@ type NseCorporateBoardMeetingRow = {
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 const LOOKAHEAD_MONTHS = 3;
 const NSE_HOME = "https://www.nseindia.com";
-const EVENT_CALENDAR_URL = `${NSE_HOME}/api/event-calendar?index=equities`;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
@@ -117,6 +116,18 @@ export function addMonthsIso(isoDate: string, months: number): string {
   const date = new Date(Date.UTC(yearText, monthText - 1, dayText));
   date.setUTCMonth(date.getUTCMonth() + months);
   return date.toISOString().slice(0, 10);
+}
+
+export function buildNseBoardMeetingFeedUrl(
+  path: "event-calendar" | "corporate-board-meetings",
+  todayIso: string,
+): string {
+  const toIso = addMonthsIso(todayIso, LOOKAHEAD_MONTHS);
+  const url = new URL(`${NSE_HOME}/api/${path}`);
+  url.searchParams.set("index", "equities");
+  url.searchParams.set("from_date", formatNseQueryDate(todayIso));
+  url.searchParams.set("to_date", formatNseQueryDate(toIso));
+  return url.toString();
 }
 
 function purposeRank(purpose: string): number {
@@ -216,32 +227,39 @@ function collectCookies(response: Response): string {
 }
 
 async function warmNseSession(): Promise<string> {
-  let home: Response;
-  try {
-    home = await fetch(NSE_HOME, {
-      headers: {
-        "User-Agent": USER_AGENT,
-        Accept: "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      cache: "no-store",
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "unknown";
-    throw new NseBoardMeetingError(`NSE session warm-up failed: ${message}`);
+  const warmUrls = [
+    `${NSE_HOME}/companies-listing/corporate-filings-event-calendar`,
+    NSE_HOME,
+  ];
+  const errors: string[] = [];
+
+  for (const url of warmUrls) {
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          "User-Agent": USER_AGENT,
+          Accept: "text/html,application/xhtml+xml",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        cache: "no-store",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown";
+      errors.push(`${url}: ${message}`);
+      continue;
+    }
+
+    const cookies = collectCookies(response);
+    if (cookies) {
+      return cookies;
+    }
+    errors.push(`${url}: HTTP ${response.status} with no cookies`);
   }
 
-  if (!home.ok) {
-    throw new NseBoardMeetingError(
-      `NSE session warm-up failed (HTTP ${home.status})`,
-    );
-  }
-
-  const cookies = collectCookies(home);
-  if (!cookies) {
-    throw new NseBoardMeetingError("NSE session warm-up returned no cookies");
-  }
-  return cookies;
+  throw new NseBoardMeetingError(
+    `NSE session warm-up failed: ${errors.join("; ") || "unknown"}`,
+  );
 }
 
 async function fetchNseJson(
@@ -276,9 +294,10 @@ async function fetchNseJson(
 
 async function fetchEventCalendarRows(
   cookies: string,
+  todayIso: string,
 ): Promise<NseBoardMeetingRow[]> {
   const payload = await fetchNseJson(
-    EVENT_CALENDAR_URL,
+    buildNseBoardMeetingFeedUrl("event-calendar", todayIso),
     cookies,
     `${NSE_HOME}/companies-listing/corporate-filings-event-calendar`,
     "NSE event calendar",
@@ -293,15 +312,8 @@ async function fetchCorporateBoardMeetingRows(
   cookies: string,
   todayIso: string,
 ): Promise<NseBoardMeetingRow[]> {
-  const toIso = addMonthsIso(todayIso, LOOKAHEAD_MONTHS);
-  const url = new URL(`${NSE_HOME}/api/corporate-board-meetings`);
-  url.searchParams.set("index", "equities");
-  url.searchParams.set("fo_sec", "true");
-  url.searchParams.set("from_date", formatNseQueryDate(todayIso));
-  url.searchParams.set("to_date", formatNseQueryDate(toIso));
-
   const payload = await fetchNseJson(
-    url.toString(),
+    buildNseBoardMeetingFeedUrl("corporate-board-meetings", todayIso),
     cookies,
     `${NSE_HOME}/companies-listing/corporate-filings-board-meetings`,
     "NSE corporate board meetings",
@@ -343,7 +355,7 @@ async function loadBoardMeetingCalendar(): Promise<Map<string, BoardMeeting>> {
     const todayIso = indiaTodayIso();
     const cookies = await warmNseSession();
     const [eventResult, corporateResult] = await Promise.allSettled([
-      fetchEventCalendarRows(cookies),
+      fetchEventCalendarRows(cookies, todayIso),
       fetchCorporateBoardMeetingRows(cookies, todayIso),
     ]);
 
