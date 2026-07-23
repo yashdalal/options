@@ -1,4 +1,5 @@
 import type { OptionType, PriceBand, UnderlyingPriceRanges } from "@/domain/types";
+import { formatRupees } from "@/lib/format";
 
 type PriceRangeBarsProps = {
   ranges: UnderlyingPriceRanges | null | undefined;
@@ -17,16 +18,6 @@ export function optionSideBadgeClass(optionType: OptionType): string {
 
 export function optionSideTextClass(optionType: OptionType): string {
   return optionType === "CALL" ? "text-sky-700" : "text-orange-700";
-}
-
-function formatNumber(value: number | null | undefined, digits = 2): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return "—";
-  }
-  return value.toLocaleString("en-IN", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
 }
 
 function positionPct(
@@ -60,9 +51,9 @@ function bandTooltip(
   if (band.high === null || band.low === null) {
     return `${label}: unavailable`;
   }
-  const parts = [`${label}: ${formatNumber(band.low)} – ${formatNumber(band.high)}`];
+  const parts = [`${label}: ${formatRupees(band.low)} – ${formatRupees(band.high)}`];
   if (spot !== null && spot !== undefined && Number.isFinite(spot) && spot > 0) {
-    parts.push(`Spot ${formatNumber(spot)}`);
+    parts.push(`Spot ${formatRupees(spot)}`);
   }
   if (strike !== null && strike !== undefined && Number.isFinite(strike) && strike > 0) {
     const outside =
@@ -71,7 +62,7 @@ function bandTooltip(
         : strike > band.high
           ? " (above range)"
           : "";
-    parts.push(`Strike ${formatNumber(strike)}${outside}`);
+    parts.push(`Strike ${formatRupees(strike)}${outside}`);
   }
   return parts.join(" · ");
 }
@@ -134,7 +125,7 @@ function RangeBar({
         className={`tabular-nums text-zinc-600 ${compact ? "text-[10px]" : "text-xs"}`}
       >
         {hasBand
-          ? `${formatNumber(band.low, compact ? 0 : 2)}–${formatNumber(band.high, compact ? 0 : 2)}`
+          ? `${formatRupees(band.low, compact ? 0 : 2)}–${formatRupees(band.high, compact ? 0 : 2)}`
           : "—"}
       </span>
     </div>
@@ -166,12 +157,12 @@ export function PriceRangeBars({
         >
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-zinc-900" aria-hidden="true" />
-            Spot ₹{formatNumber(spot)}
+            Spot {formatRupees(spot)}
           </span>
           {strike !== null && strike !== undefined ? (
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-red-600" aria-hidden="true" />
-              Strike ₹{formatNumber(strike)}
+              Strike {formatRupees(strike)}
             </span>
           ) : null}
         </div>

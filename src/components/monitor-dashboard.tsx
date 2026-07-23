@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MonitorSnapshot, ReportRow, ReportSide } from "@/domain/types";
 import { shouldHighlightRow, shouldHighlightSide } from "@/domain/proximity";
+import { formatNumber, formatPercent, formatRupees } from "@/lib/format";
 
 const THRESHOLD_KEY = "near_expiry_highlight_threshold";
 const SHOW_NEAR_ONLY_KEY = "near_expiry_show_near_only";
@@ -34,23 +35,6 @@ function readStoredShowNearOnly(): boolean {
 
 function rowMeetsCriteria(row: ReportRow, threshold: number): boolean {
   return shouldHighlightRow(row.call?.pctNear, row.put?.pctNear, threshold);
-}
-
-function formatNumber(value: number | null | undefined, digits = 2): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return "—";
-  }
-  return value.toLocaleString("en-IN", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
-}
-
-function formatPercent(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return "—";
-  }
-  return `${value.toFixed(2)}%`;
 }
 
 function formatPosition(lots: number, shares: number): string {
@@ -120,13 +104,13 @@ function SideCells({
   return (
     <>
       <td className={optionCellClass(highlighted)}>
-        {side ? formatNumber(side.strike, 2) : "—"}
+        {side ? formatRupees(side.strike, 2) : "—"}
       </td>
       <td className={optionCellClass(highlighted)}>
         {side ? formatPosition(side.lots, side.shares) : "—"}
       </td>
       <td className={optionCellClass(highlighted)}>{formatPercent(side?.pctNear)}</td>
-      <td className={optionCellClass(highlighted)}>{formatNumber(side?.inrNear)}</td>
+      <td className={optionCellClass(highlighted)}>{formatRupees(side?.inrNear)}</td>
     </>
   );
 }
@@ -444,11 +428,11 @@ export function MonitorDashboard({
                 "Call Strike",
                 "Call Lots (Shares)",
                 "Call % Near",
-                "Call INR Near",
+                "Call ₹ Near",
                 "Put Strike",
                 "Put Lots (Shares)",
                 "Put % Near",
-                "Put INR Near",
+                "Put ₹ Near",
               ].map((heading) => (
                 <th
                   key={heading || "expand"}
@@ -499,7 +483,7 @@ export function MonitorDashboard({
                       </span>
                     </td>
                     <td className="border-b border-zinc-100 px-3 py-2">
-                      {formatNumber(row.spot)}
+                      {formatRupees(row.spot)}
                     </td>
                     <SideCells side={row.call} highlighted={callHighlighted} />
                     <SideCells side={row.put} highlighted={putHighlighted} />
@@ -534,7 +518,7 @@ export function MonitorDashboard({
                         </span>
                       </td>
                       <td className="border-b border-zinc-100 px-3 py-2 text-zinc-400">
-                        {formatNumber(row.spot)}
+                        {formatRupees(row.spot)}
                       </td>
                       <SideCells side={detail.call} highlighted={detailCallHighlighted} />
                       <SideCells side={detail.put} highlighted={detailPutHighlighted} />

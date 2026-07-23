@@ -19,6 +19,7 @@ import type {
   UnderlyingPriceRanges,
 } from "@/domain/types";
 import { useScreenerSettings } from "@/hooks/use-screener-settings";
+import { formatNumber, formatPercent, formatRupees } from "@/lib/format";
 import {
   companiesForExpiry,
   filterCompanyChoices,
@@ -39,23 +40,6 @@ type ReportSortDir = "asc" | "desc";
 type InvestmentReportProps = {
   onLoginRequired: () => void;
 };
-
-function formatNumber(value: number | null | undefined, digits = 2): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return "—";
-  }
-  return value.toLocaleString("en-IN", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
-}
-
-function formatPercent(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return "—";
-  }
-  return `${value.toFixed(2)}%`;
-}
 
 function formatExpiryLabel(expiryIso: string): string {
   const [year, month, day] = expiryIso.split("-").map(Number);
@@ -1191,13 +1175,13 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-zinc-900" aria-hidden="true" />
-                      ₹{formatNumber(row.spot)}
+                      {formatRupees(row.spot)}
                     </span>
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" aria-hidden="true" />
-                      ₹{formatNumber(row.strike)}
+                      {formatRupees(row.strike)}
                     </span>
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
@@ -1210,16 +1194,16 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                     {formatPercent(row.annualizedReturnPct)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
-                    {formatNumber(row.priceDiffInr)}
+                    {formatRupees(row.priceDiffInr)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
-                    {formatNumber(row.premium)}
+                    {formatRupees(row.premium)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
-                    {formatNumber(row.netPremium, 0)}
+                    {formatRupees(row.netPremium, 0)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
-                    {formatNumber(row.margin, 0)}
+                    {formatRupees(row.margin, 0)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2.5 whitespace-nowrap">
                     <BoardMeetingCell
