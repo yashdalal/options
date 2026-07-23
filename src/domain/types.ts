@@ -136,6 +136,7 @@ export type ScreenSnapshot = {
 export type ScreenMeta = {
   underlyings: string[];
   expiriesByUnderlying: Record<string, string[]>;
+  nameByUnderlying: Record<string, string>;
 };
 
 export type InvestmentReportProgress = {

@@ -7,6 +7,7 @@ import {
   filterExpiriesToCurrentAndNextMonth,
   listExpiriesForUnderlying,
   listOptionUnderlyings,
+  listUnderlyingNames,
   loadScripMasterRegistry,
   parseScripCsv,
   resolveCashInstrument,
@@ -170,6 +171,25 @@ describe("scrip csv parsing", () => {
     expect(fo.find((item) => item.instrumentToken === "12345")?.strike).toBe(900);
     expect(fo.find((item) => item.instrumentToken === "12345")?.expiryIso).toBe("2025-07-31");
     expect(cm.find((item) => item.underlying === "SBIN")?.exchangeSegment).toBe("nse_cm");
+    expect(cm.find((item) => item.underlying === "SBIN")?.name).toBe("STATE BANK OF INDIA");
+  });
+
+  it("indexes human-readable cash names for option underlyings", () => {
+    const registry = buildScripMasterRegistryFromInstruments("2026-07-23", [
+      ...parseScripCsv(
+        `pSymbol,pTrdSymbol,pSymBl,pInstrumentType,pDesc
+123,GRASIM-EQ,GRASIM,EQ,GRASIM INDUSTRIES LIMITED`,
+        "nse_cm",
+      ),
+      ...parseScripCsv(
+        `pSymbol,pGroup,pExchSeg,pInstType,pSymbolName,pTrdSymbol,pOptionType,dStrikePrice;,lLotSize,lExpiryDate ,lMultiplier
+107305,XX,nse_fo,OPTSTK,GRASIM,GRASIM26AUG3740PE,PE,374000,250,1472135400,-1`,
+        "nse_fo",
+      ),
+    ]);
+    expect(listUnderlyingNames(registry)).toEqual({
+      GRASIM: "GRASIM INDUSTRIES LIMITED",
+    });
   });
 
   it("parses Kotak Neo FO headers with epoch expiry and paise strikes", () => {

@@ -21,6 +21,7 @@ import {
   listExpiriesForUnderlying,
   listOptionUnderlyings,
   listOptionsForUnderlyingExpiry,
+  listUnderlyingNames,
   loadScripMasterRegistry,
   resolveCashInstrument,
 } from "./kotak/scrip-master";
@@ -89,7 +90,11 @@ export async function getScreenMeta(
   for (const underlying of underlyings) {
     expiriesByUnderlying[underlying] = listExpiriesForUnderlying(registry, underlying);
   }
-  return { underlyings, expiriesByUnderlying };
+  return {
+    underlyings,
+    expiriesByUnderlying,
+    nameByUnderlying: listUnderlyingNames(registry),
+  };
 }
 
 function toScreenable(options: ReturnType<typeof listOptionsForUnderlyingExpiry>): ScreenableOption[] {

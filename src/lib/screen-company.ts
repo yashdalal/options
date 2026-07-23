@@ -137,6 +137,34 @@ export function companiesForExpiry(
   };
 }
 
+export function companyChoiceLabel(
+  symbol: string,
+  nameByUnderlying: Record<string, string> = {},
+): string {
+  const name = nameByUnderlying[symbol]?.trim();
+  if (!name || name.toUpperCase() === symbol.toUpperCase()) {
+    return symbol;
+  }
+  return `${symbol} — ${name}`;
+}
+
+function companySearchRank(
+  symbol: string,
+  name: string,
+  normalized: string,
+): number {
+  if (symbol.startsWith(normalized)) {
+    return 0;
+  }
+  if (name.startsWith(normalized)) {
+    return 1;
+  }
+  if (symbol.includes(normalized)) {
+    return 2;
+  }
+  return 3;
+}
+
 export function filterCompanyChoices(
   eligible: string[],
   selected: string[],
@@ -145,6 +173,7 @@ export function filterCompanyChoices(
   allUnderlyings: string[] = eligible,
   expiriesByUnderlying: Record<string, string[]> = {},
   selectedExpiry = "",
+  nameByUnderlying: Record<string, string> = {},
   now: Date = new Date(),
 ): {
   matches: string[];
@@ -165,13 +194,26 @@ export function filterCompanyChoices(
     };
   }
 
+  const matchesQuery = (symbol: string): boolean => {
+    const name = (nameByUnderlying[symbol] ?? "").toUpperCase();
+    return symbol.includes(normalized) || name.includes(normalized);
+  };
+
   const matches = available
-    .filter((symbol) => symbol.includes(normalized))
+    .filter(matchesQuery)
     .sort((left, right) => {
-      const leftPrefix = left.startsWith(normalized) ? 0 : 1;
-      const rightPrefix = right.startsWith(normalized) ? 0 : 1;
-      if (leftPrefix !== rightPrefix) {
-        return leftPrefix - rightPrefix;
+      const leftRank = companySearchRank(
+        left,
+        (nameByUnderlying[left] ?? "").toUpperCase(),
+        normalized,
+      );
+      const rightRank = companySearchRank(
+        right,
+        (nameByUnderlying[right] ?? "").toUpperCase(),
+        normalized,
+      );
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
       }
       return left.localeCompare(right);
     });
@@ -182,7 +224,7 @@ export function filterCompanyChoices(
       (symbol) =>
         !selectedSet.has(symbol) &&
         !eligibleSet.has(symbol) &&
-        symbol.includes(normalized),
+        matchesQuery(symbol),
     )
     .flatMap((symbol) => {
       const expiries = filterExpiriesWithinMonthsAhead(
@@ -193,10 +235,18 @@ export function filterCompanyChoices(
       return expiries.map((expiryIso) => ({ symbol, expiryIso }));
     })
     .sort((left, right) => {
-      const leftPrefix = left.symbol.startsWith(normalized) ? 0 : 1;
-      const rightPrefix = right.symbol.startsWith(normalized) ? 0 : 1;
-      if (leftPrefix !== rightPrefix) {
-        return leftPrefix - rightPrefix;
+      const leftRank = companySearchRank(
+        left.symbol,
+        (nameByUnderlying[left.symbol] ?? "").toUpperCase(),
+        normalized,
+      );
+      const rightRank = companySearchRank(
+        right.symbol,
+        (nameByUnderlying[right.symbol] ?? "").toUpperCase(),
+        normalized,
+      );
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
       }
       const symbolCmp = left.symbol.localeCompare(right.symbol);
       if (symbolCmp !== 0) {
