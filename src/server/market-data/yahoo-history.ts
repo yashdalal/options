@@ -37,9 +37,16 @@ export class YahooHistoryError extends Error {
   }
 }
 
+const INDEX_YAHOO_SYMBOLS: Record<string, string> = {
+  NIFTY: "^NSEI",
+  BANKNIFTY: "^NSEBANK",
+  FINNIFTY: "NIFTY_FIN_SERVICE.NS",
+  MIDCPNIFTY: "NIFTY_MID_SELECT.NS",
+};
+
 export function toYahooSymbol(nseSymbol: string): string {
   const cleaned = nseSymbol.trim().toUpperCase().replace(/-EQ$/i, "");
-  return `${cleaned}.NS`;
+  return INDEX_YAHOO_SYMBOLS[cleaned] ?? `${cleaned}.NS`;
 }
 
 export function computeRange(bars: DailyBar[], lookbackBars: number): PriceBand {

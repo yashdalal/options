@@ -40,9 +40,12 @@ const CACHE_DIR =
     ? path.join(os.tmpdir(), "near-expiry", "scrip-master")
     : path.join(process.cwd(), ".cache", "scrip-master");
 
+const SCRIP_REGISTRY_BUILD = 2;
+
 const globalStore = globalThis as typeof globalThis & {
   __scripMasterRegistryCache?: {
     asOfDate: string;
+    build: number;
     registry: ScripMasterRegistry;
   };
 };
@@ -65,6 +68,7 @@ export function seedScripMasterRegistryMemoryCache(
 ): void {
   globalStore.__scripMasterRegistryCache = {
     asOfDate: registry.asOfDate,
+    build: SCRIP_REGISTRY_BUILD,
     registry,
   };
 }
@@ -323,7 +327,7 @@ function setPreferredCashSymbol(
   cashBySymbol.set(key, preferCashInstrument(cashBySymbol.get(key), instrument));
 }
 
-function isStockOption(instrument: ScripInstrument): boolean {
+function isScreenableOption(instrument: ScripInstrument): boolean {
   if (instrument.exchangeSegment !== "nse_fo" || !instrument.optionType) {
     return false;
   }
@@ -331,7 +335,13 @@ function isStockOption(instrument: ScripInstrument): boolean {
     return false;
   }
   const type = instrument.instrumentType.toUpperCase();
-  return type.includes("OPTSTK") || type === "CE" || type === "PE" || type === "";
+  return (
+    type.includes("OPTSTK") ||
+    type.includes("OPTIDX") ||
+    type === "CE" ||
+    type === "PE" ||
+    type === ""
+  );
 }
 
 function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripMasterRegistry {
@@ -346,7 +356,7 @@ function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripM
       const withoutSuffix = instrument.tradingSymbol.replace(/-EQ$/i, "").toUpperCase();
       setPreferredCashSymbol(cashBySymbol, withoutSuffix, instrument);
     }
-    if (isStockOption(instrument)) {
+    if (isScreenableOption(instrument)) {
       const key = instrument.underlying.toUpperCase();
       const existing = optionsByUnderlying.get(key);
       if (existing) {
@@ -385,7 +395,7 @@ export async function loadScripMasterRegistry(
 ): Promise<ScripMasterRegistry> {
   const asOfDate = todayIstDate();
   const memory = globalStore.__scripMasterRegistryCache;
-  if (memory?.asOfDate === asOfDate) {
+  if (memory?.asOfDate === asOfDate && memory.build === SCRIP_REGISTRY_BUILD) {
     return memory.registry;
   }
 
@@ -463,7 +473,11 @@ export async function loadScripMasterRegistry(
   }
 
   const registry = buildRegistry(asOfDate, instruments);
-  globalStore.__scripMasterRegistryCache = { asOfDate, registry };
+  globalStore.__scripMasterRegistryCache = {
+    asOfDate,
+    build: SCRIP_REGISTRY_BUILD,
+    registry,
+  };
   return registry;
 }
 

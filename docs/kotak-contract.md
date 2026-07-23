@@ -54,7 +54,7 @@ Yahoo Finance daily bars (`{SYMBOL}.NS`, `range=1y`) instead of Kotak year field
 
 ## Option premiums
 
-There is no dedicated option-chain endpoint. Build the chain from the daily `nse_fo` scrip master (`OPTSTK` rows with strike, expiry, lot size, CE/PE), then quote `nse_fo|{instrumentToken}`.
+There is no dedicated option-chain endpoint. Build the chain from the daily `nse_fo` scrip master (`OPTSTK` / `OPTIDX` rows with strike, expiry, lot size, CE/PE), then quote `nse_fo|{instrumentToken}`.
 
 For sell-side screener premium, walk `depth.buy` levels with price > 0. Available lots at a level are `floor(quantity / lotSize)` (not the ORDERS count). When requested lots exceed liquidity at the best bid, the screener emits one candidate row per fill price. Fall back to `buy_price` as a single fill only when depth has no usable quantity. Do not use LTP for executable sell premium — deep OTM options often show a stale tick with an empty buy book.
 

@@ -444,9 +444,11 @@ describe("screening math", () => {
   it("indexes option underlyings from scrip master", () => {
     const registry = registryFromFixtures();
     expect(registry.optionUnderlyings).toContain("SBIN");
+    expect(registry.optionUnderlyings).toContain("NIFTY");
     expect(listExpiriesForUnderlying(registry, "SBIN")).toContain("2025-07-31");
     expect(listOptionsForUnderlyingExpiry(registry, "SBIN", "2025-07-31").length).toBeGreaterThan(
       0,
     );
+    expect(listOptionsForUnderlyingExpiry(registry, "NIFTY", "2025-07-31")).toHaveLength(2);
   });
 });

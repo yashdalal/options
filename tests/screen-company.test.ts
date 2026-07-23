@@ -3,6 +3,7 @@ import type { ScreenCandidate } from "@/domain/types";
 import {
   companiesForExpiry,
   enrichCandidatesWithMargins,
+  filterCompanyChoices,
   filterQualifyingCandidates,
   listUniqueExpiries,
   runPool,
@@ -49,6 +50,44 @@ describe("companiesForExpiry", () => {
     );
     expect(result.eligible).toEqual(["AAA", "CCC"]);
     expect(result.skipped).toBe(1);
+  });
+});
+
+describe("filterCompanyChoices", () => {
+  const eligible = ["ACC", "ASIANPAINT", "NIFTY", "RELIANCE", "TCS"];
+
+  it("searches the full eligible list and ranks prefix matches first", () => {
+    const result = filterCompanyChoices(eligible, [], "NIF", 2);
+    expect(result.matches).toEqual(["NIFTY"]);
+    expect(result.truncated).toBe(false);
+    expect(result.otherExpiryMatches).toEqual([]);
+  });
+
+  it("truncates only the empty-query browse list", () => {
+    const result = filterCompanyChoices(eligible, ["ACC"], "", 2);
+    expect(result.matches).toEqual(["ASIANPAINT", "NIFTY"]);
+    expect(result.truncated).toBe(true);
+    expect(result.total).toBe(4);
+  });
+
+  it("surfaces matches that exist on other expiries", () => {
+    const result = filterCompanyChoices(
+      ["RELIANCE", "TCS"],
+      [],
+      "NIF",
+      50,
+      ["NIFTY", "RELIANCE", "TCS"],
+      {
+        NIFTY: ["2026-07-30", "2026-08-06"],
+        RELIANCE: ["2026-07-28"],
+        TCS: ["2026-07-28"],
+      },
+      "2026-07-28",
+    );
+    expect(result.matches).toEqual([]);
+    expect(result.otherExpiryMatches).toEqual([
+      { symbol: "NIFTY", nextExpiryIso: "2026-07-30" },
+    ]);
   });
 });
 

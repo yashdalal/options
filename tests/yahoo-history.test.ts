@@ -11,6 +11,11 @@ describe("toYahooSymbol", () => {
     expect(toYahooSymbol("sbin-eq")).toBe("SBIN.NS");
     expect(toYahooSymbol("M&M")).toBe("M&M.NS");
   });
+
+  it("maps index underlyings to Yahoo index tickers", () => {
+    expect(toYahooSymbol("NIFTY")).toBe("^NSEI");
+    expect(toYahooSymbol("BANKNIFTY")).toBe("^NSEBANK");
+  });
 });
 
 describe("computeRange", () => {

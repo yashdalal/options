@@ -133,6 +133,78 @@ export function companiesForExpiry(
   };
 }
 
+export function filterCompanyChoices(
+  eligible: string[],
+  selected: string[],
+  query: string,
+  emptyQueryLimit = 50,
+  allUnderlyings: string[] = eligible,
+  expiriesByUnderlying: Record<string, string[]> = {},
+  selectedExpiry = "",
+): {
+  matches: string[];
+  truncated: boolean;
+  total: number;
+  otherExpiryMatches: { symbol: string; nextExpiryIso: string }[];
+} {
+  const selectedSet = new Set(selected);
+  const available = eligible.filter((symbol) => !selectedSet.has(symbol));
+  const normalized = query.trim().toUpperCase();
+
+  if (!normalized) {
+    return {
+      matches: available.slice(0, emptyQueryLimit),
+      truncated: available.length > emptyQueryLimit,
+      total: available.length,
+      otherExpiryMatches: [],
+    };
+  }
+
+  const matches = available
+    .filter((symbol) => symbol.includes(normalized))
+    .sort((left, right) => {
+      const leftPrefix = left.startsWith(normalized) ? 0 : 1;
+      const rightPrefix = right.startsWith(normalized) ? 0 : 1;
+      if (leftPrefix !== rightPrefix) {
+        return leftPrefix - rightPrefix;
+      }
+      return left.localeCompare(right);
+    });
+
+  const eligibleSet = new Set(eligible);
+  const otherExpiryMatches = allUnderlyings
+    .filter(
+      (symbol) =>
+        !selectedSet.has(symbol) &&
+        !eligibleSet.has(symbol) &&
+        symbol.includes(normalized),
+    )
+    .map((symbol) => {
+      const expiries = (expiriesByUnderlying[symbol] ?? [])
+        .filter((expiry) => !selectedExpiry || expiry >= selectedExpiry)
+        .sort();
+      const fallback = [...(expiriesByUnderlying[symbol] ?? [])].sort();
+      const nextExpiryIso = expiries[0] ?? fallback[0] ?? "";
+      return { symbol, nextExpiryIso };
+    })
+    .filter((item) => item.nextExpiryIso)
+    .sort((left, right) => {
+      const leftPrefix = left.symbol.startsWith(normalized) ? 0 : 1;
+      const rightPrefix = right.symbol.startsWith(normalized) ? 0 : 1;
+      if (leftPrefix !== rightPrefix) {
+        return leftPrefix - rightPrefix;
+      }
+      return left.symbol.localeCompare(right.symbol);
+    });
+
+  return {
+    matches,
+    truncated: false,
+    total: matches.length,
+    otherExpiryMatches,
+  };
+}
+
 export function listUniqueExpiries(
   expiriesByUnderlying: Record<string, string[]>,
 ): string[] {

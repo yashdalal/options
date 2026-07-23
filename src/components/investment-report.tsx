@@ -21,6 +21,7 @@ import type {
 import { useScreenerSettings } from "@/hooks/use-screener-settings";
 import {
   companiesForExpiry,
+  filterCompanyChoices,
   listUniqueExpiries,
   runPool,
   screenCompany,
@@ -187,16 +188,37 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
     };
   }, [selectedExpiry]);
 
-  const filteredCompanies = useMemo(() => {
-    const query = companySearch.trim().toUpperCase();
-    const selected = new Set(selectedCompanies);
-    const matches = query
-      ? eligibility.eligible.filter((symbol) => symbol.includes(query))
-      : eligibility.eligible;
-    return matches.filter((symbol) => !selected.has(symbol)).slice(0, 50);
-  }, [companySearch, eligibility.eligible, selectedCompanies]);
+  const companyChoices = useMemo(
+    () =>
+      filterCompanyChoices(
+        eligibility.eligible,
+        selectedCompanies,
+        companySearch,
+        50,
+        meta?.underlyings ?? eligibility.eligible,
+        meta?.expiriesByUnderlying ?? {},
+        selectedExpiry,
+      ),
+    [
+      companySearch,
+      eligibility.eligible,
+      meta?.expiriesByUnderlying,
+      meta?.underlyings,
+      selectedCompanies,
+      selectedExpiry,
+    ],
+  );
+  const filteredCompanies = companyChoices.matches;
 
-  function addCompany(symbol: string) {
+  function addCompany(symbol: string, expiryForSymbol?: string) {
+    if (expiryForSymbol && expiryForSymbol !== selectedExpiry) {
+      setExpiryIso(expiryForSymbol);
+      setSelectedCompanies([symbol]);
+      setCompanySearch("");
+      setHighlightIndex(0);
+      setCompanyPickerOpen(false);
+      return;
+    }
     setSelectedCompanies((current) => {
       if (current.includes(symbol) || current.length >= MAX_SELECTED_COMPANIES) {
         return current;
@@ -638,34 +660,65 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                 role="listbox"
                 className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg"
               >
-                {filteredCompanies.length === 0 ? (
+                {filteredCompanies.length === 0 &&
+                companyChoices.otherExpiryMatches.length === 0 ? (
                   <p className="px-3 py-2 text-sm text-zinc-500">
                     {companySearch.trim()
-                      ? `No companies match “${companySearch.trim()}”.`
+                      ? `No companies match “${companySearch.trim()}” for this expiry.`
                       : "All matching companies are already selected."}
                   </p>
                 ) : (
-                  filteredCompanies.map((symbol, index) => {
-                    const active = index === highlightIndex;
-                    return (
-                      <button
-                        key={symbol}
-                        type="button"
-                        role="option"
-                        aria-selected={active}
-                        ref={active ? highlightOptionRef : null}
-                        onMouseEnter={() => setHighlightIndex(index)}
-                        onClick={() => addCompany(symbol)}
-                        className={`block w-full px-3 py-2 text-left text-sm ${
-                          active
-                            ? "bg-zinc-100 text-zinc-900"
-                            : "text-zinc-800 hover:bg-zinc-50"
-                        }`}
-                      >
-                        {symbol}
-                      </button>
-                    );
-                  })
+                  <>
+                    {filteredCompanies.map((symbol, index) => {
+                      const active = index === highlightIndex;
+                      return (
+                        <button
+                          key={symbol}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          ref={active ? highlightOptionRef : null}
+                          onMouseEnter={() => setHighlightIndex(index)}
+                          onClick={() => addCompany(symbol)}
+                          className={`block w-full px-3 py-2 text-left text-sm ${
+                            active
+                              ? "bg-zinc-100 text-zinc-900"
+                              : "text-zinc-800 hover:bg-zinc-50"
+                          }`}
+                        >
+                          {symbol}
+                        </button>
+                      );
+                    })}
+                    {companyChoices.otherExpiryMatches.length > 0 ? (
+                      <div className="border-t border-zinc-100">
+                        <p className="px-3 py-2 text-xs font-medium text-zinc-500">
+                          Available on other expiries
+                        </p>
+                        {companyChoices.otherExpiryMatches.map((item) => (
+                          <button
+                            key={item.symbol}
+                            type="button"
+                            onClick={() =>
+                              addCompany(item.symbol, item.nextExpiryIso)
+                            }
+                            className="block w-full px-3 py-2 text-left text-sm text-zinc-800 hover:bg-zinc-50"
+                          >
+                            <span className="font-medium">{item.symbol}</span>
+                            <span className="mt-0.5 block text-xs text-zinc-500">
+                              Switch to {formatExpiryLabel(item.nextExpiryIso)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {companyChoices.truncated ? (
+                      <p className="border-t border-zinc-100 px-3 py-2 text-xs text-zinc-500">
+                        Showing first {filteredCompanies.length} of {companyChoices.total}.
+                        Type to search all.
+                      </p>
+                    ) : null}
+                  </>
                 )}
               </div>
             ) : null}
