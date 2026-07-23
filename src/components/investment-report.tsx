@@ -604,8 +604,8 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-zinc-900">Investment Report</h1>
             <p className="text-sm text-zinc-600">
-              Screen a short company list with the same thresholds as the screener and list every
-              option that qualifies.
+              Screen a short company list and list every option that meets min spread and min
+              annualized return.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -896,15 +896,57 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
             companies. Only names that list the chosen expiry can be added for that run.
           </li>
           <li>
-            Settings (side, margin account, min spread %, min return % p.a., lots) are shared with
-            the Screener tab and use the same calculations.
-          </li>
-          <li>
             An option only qualifies if it meets both the minimum spread and the minimum
             annualized return after sell charges and broker margin. Every qualifying strike is
             shown.
           </li>
         </ul>
+      </details>
+
+      <details className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
+        <summary className="cursor-pointer text-sm font-medium text-zinc-800 select-none">
+          Calculation formulas
+        </summary>
+        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <dt className="font-medium text-zinc-800">Spread % (CE)</dt>
+            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">
+              ((strike − spot) / spot) × 100
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="font-medium text-zinc-800">Spread % (PE)</dt>
+            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">
+              ((spot − strike) / spot) × 100
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="font-medium text-zinc-800">Diff ₹</dt>
+            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">|strike − spot|</dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="font-medium text-zinc-800">Total net premium</dt>
+            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">
+              premium turnover − sell charges
+            </dd>
+            <dd className="text-xs text-zinc-500">
+              Charges: ₹10 brokerage/order + STT 0.15% + exchange ~0.03503% + SEBI 0.0001%; GST
+              18% on (brokerage + exchange + SEBI)
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="font-medium text-zinc-800">Ann. return %</dt>
+            <dd className="font-mono text-xs text-zinc-600 sm:text-sm">
+              (net premium / margin) × (365 / calendar days) × 100
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="font-medium text-zinc-800">Bid / Margin</dt>
+            <dd className="text-xs text-zinc-600 sm:text-sm">
+              Bid from order-book buy depth; margin from broker check-margin API
+            </dd>
+          </div>
+        </dl>
       </details>
 
       {error ? (
@@ -1016,16 +1058,18 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                   { heading: "Lots" },
                   { heading: "Spread %" },
                   { heading: "Ann. return %", sort: "return" as const },
+                  { heading: "Diff ₹", title: "|strike − spot|" },
                   { heading: "Bid" },
                   { heading: "Net premium" },
                   { heading: "Margin" },
                   { heading: "Board meeting" },
-                ] satisfies { heading: string; sort?: ReportSortKey }[]
-              ).map(({ heading, sort }) => {
+                ] satisfies { heading: string; sort?: ReportSortKey; title?: string }[]
+              ).map(({ heading, sort, title }) => {
                 const active = Boolean(sort && sortKey === sort);
                 return (
                   <th
                     key={heading}
+                    title={title}
                     aria-sort={
                       sort
                         ? active
@@ -1076,7 +1120,7 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
           <tbody>
             {sortedRows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
+                <td colSpan={11} className="px-3 py-8 text-center text-zinc-500">
                   {metaLoading
                     ? "Loading companies…"
                     : running
@@ -1131,6 +1175,9 @@ export function InvestmentReport({ onLogout, onLoginRequired }: InvestmentReport
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 font-semibold tabular-nums">
                     {formatPercent(row.annualizedReturnPct)}
+                  </td>
+                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
+                    {formatNumber(row.priceDiffInr)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatNumber(row.premium)}

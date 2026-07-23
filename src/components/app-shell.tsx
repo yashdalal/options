@@ -7,7 +7,6 @@ import {
 } from "@/components/login-form";
 import { InvestmentReport } from "@/components/investment-report";
 import { MonitorDashboard } from "@/components/monitor-dashboard";
-import { OptionsScreener } from "@/components/options-screener";
 import { ACCOUNT_DEFINITIONS } from "@/config/accounts";
 
 type AuthStatus = {
@@ -18,7 +17,7 @@ type AuthStatus = {
   accounts?: AccountAuthStatus[];
 };
 
-type AppTab = "monitor" | "screener" | "report";
+type AppTab = "monitor" | "report";
 
 const EMPTY_ACCOUNTS: AccountAuthStatus[] = ACCOUNT_DEFINITIONS.map((definition) => ({
   accountId: definition.id,
@@ -124,19 +123,6 @@ export function AppShell() {
           <button
             type="button"
             role="tab"
-            aria-selected={tab === "screener"}
-            onClick={() => setTab("screener")}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium ${
-              tab === "screener"
-                ? "bg-zinc-900 text-white"
-                : "bg-white text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50"
-            }`}
-          >
-            Screener
-          </button>
-          <button
-            type="button"
-            role="tab"
             aria-selected={tab === "report"}
             onClick={() => setTab("report")}
             className={`rounded-full px-3 py-1.5 text-sm font-medium ${
@@ -153,12 +139,6 @@ export function AppShell() {
         <MonitorDashboard
           active={tab === "monitor"}
           highlightDefault={auth.highlightDefault}
-          onLogout={() => void loadStatus()}
-          onLoginRequired={() => void loadStatus()}
-        />
-      </div>
-      <div className={tab === "screener" ? undefined : "hidden"}>
-        <OptionsScreener
           onLogout={() => void loadStatus()}
           onLoginRequired={() => void loadStatus()}
         />
