@@ -212,7 +212,7 @@ describe("pairing", () => {
 });
 
 describe("proximity", () => {
-  it("keeps signed INR near and positive percent near", () => {
+  it("keeps signed ₹ near and positive percent near", () => {
     expect(calculateInrNear("CALL", 900, 868.5)).toBeCloseTo(31.5);
     expect(calculateInrNear("PUT", 850, 868.5)).toBeCloseTo(18.5);
     expect(calculatePctNear(31.5, 868.5)).toBeCloseTo((31.5 / 868.5) * 100);
