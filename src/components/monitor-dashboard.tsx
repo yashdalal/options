@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MonitorSnapshot, ReportRow, ReportSide } from "@/domain/types";
-import { shouldHighlightSide } from "@/domain/proximity";
+import { shouldHighlightRow, shouldHighlightSide } from "@/domain/proximity";
 
 const THRESHOLD_KEY = "near_expiry_highlight_threshold";
+const SHOW_NEAR_ONLY_KEY = "near_expiry_show_near_only";
 
 type MonitorDashboardProps = {
   highlightDefault: number;
@@ -22,6 +23,17 @@ function readStoredThreshold(fallback: number): number {
   }
   const parsed = Number(stored);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readStoredShowNearOnly(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.localStorage.getItem(SHOW_NEAR_ONLY_KEY) === "1";
+}
+
+function rowMeetsCriteria(row: ReportRow, threshold: number): boolean {
+  return shouldHighlightRow(row.call?.pctNear, row.put?.pctNear, threshold);
 }
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
@@ -57,6 +69,41 @@ function accountBadgeClass(accountId: string): string {
     return "bg-violet-100 text-violet-900";
   }
   return "bg-rose-100 text-rose-900";
+}
+
+function accountDotClass(accountId: string): string {
+  if (accountId === "prakash") {
+    return "bg-sky-500";
+  }
+  if (accountId === "gopa") {
+    return "bg-violet-500";
+  }
+  return "bg-rose-500";
+}
+
+function AccountDots({
+  details,
+}: {
+  details: ReportRow["details"];
+}) {
+  if (details.length === 0) {
+    return null;
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-1"
+      title={details.map((detail) => detail.accountLabel).join(", ")}
+      aria-label={`Accounts: ${details.map((detail) => detail.accountLabel).join(", ")}`}
+    >
+      {details.map((detail) => (
+        <span
+          key={detail.accountId}
+          className={`inline-block size-1.5 rounded-full ${accountDotClass(detail.accountId)}`}
+        />
+      ))}
+    </span>
+  );
 }
 
 function rowKey(row: ReportRow, index: number): string {
@@ -101,10 +148,15 @@ export function MonitorDashboard({
   );
   const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
+  const [showNearOnly, setShowNearOnly] = useState(() => readStoredShowNearOnly());
 
   useEffect(() => {
     window.localStorage.setItem(THRESHOLD_KEY, String(threshold));
   }, [threshold]);
+
+  useEffect(() => {
+    window.localStorage.setItem(SHOW_NEAR_ONLY_KEY, showNearOnly ? "1" : "0");
+  }, [showNearOnly]);
 
   function commitThresholdInput(raw: string) {
     const parsed = Number(raw);
@@ -169,6 +221,17 @@ export function MonitorDashboard({
       null
     );
   }, [snapshot, selectedExpiry]);
+
+  const rowSummary = useMemo(() => {
+    const rows = activeGroup?.rows ?? [];
+    const entries = rows.map((row, index) => ({ row, index }));
+    const nearEntries = entries.filter(({ row }) => rowMeetsCriteria(row, threshold));
+    return {
+      total: rows.length,
+      nearCount: nearEntries.length,
+      visibleEntries: showNearOnly ? nearEntries : entries,
+    };
+  }, [activeGroup, showNearOnly, threshold]);
 
   useEffect(() => {
     // Reset expanded rows when the visible expiry snapshot changes.
@@ -307,30 +370,63 @@ export function MonitorDashboard({
         <div className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
           Expiry
         </div>
-        <div
-          className="flex gap-2 overflow-x-auto"
-          role="tablist"
-          aria-label="Expiry date"
-        >
-          {snapshot?.groups.map((group) => {
-            const selected = activeGroup?.expiryIso === group.expiryIso;
-            return (
-              <button
-                key={group.expiryIso}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                onClick={() => setSelectedExpiry(group.expiryIso)}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ${
-                  selected
-                    ? "bg-zinc-900 text-white"
-                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                }`}
-              >
-                {group.expiryLabel}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-3">
+          <div
+            className="flex min-w-0 gap-2 overflow-x-auto"
+            role="tablist"
+            aria-label="Expiry date"
+          >
+            {snapshot?.groups.map((group) => {
+              const selected = activeGroup?.expiryIso === group.expiryIso;
+              return (
+                <button
+                  key={group.expiryIso}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setSelectedExpiry(group.expiryIso)}
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ${
+                    selected
+                      ? "bg-zinc-900 text-white"
+                      : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                  }`}
+                >
+                  {group.expiryLabel}
+                </button>
+              );
+            })}
+          </div>
+          <div className="inline-flex items-center gap-3 rounded-full border border-zinc-200 bg-white py-1 pr-1 pl-3.5 shadow-sm">
+            <p className="text-sm whitespace-nowrap">
+              <span className="text-base font-semibold text-amber-800 tabular-nums">
+                {rowSummary.nearCount}
+              </span>
+              <span className="text-zinc-500"> near</span>
+              <span className="mx-1.5 text-zinc-300" aria-hidden>
+                ·
+              </span>
+              <span className="tabular-nums text-zinc-500">{rowSummary.total}</span>
+              <span className="text-zinc-500"> total</span>
+              <span className="mx-1.5 text-zinc-300" aria-hidden>
+                ·
+              </span>
+              <span className="tabular-nums text-zinc-500">≤{threshold}%</span>
+            </p>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showNearOnly}
+              aria-label="Show only positions within the near threshold"
+              onClick={() => setShowNearOnly((current) => !current)}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                showNearOnly
+                  ? "bg-amber-600 text-white shadow-sm"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+              }`}
+            >
+              Near only
+            </button>
+          </div>
         </div>
       </div>
 
@@ -361,14 +457,16 @@ export function MonitorDashboard({
             </tr>
           </thead>
           <tbody>
-            {!activeGroup || activeGroup.rows.length === 0 ? (
+            {rowSummary.visibleEntries.length === 0 ? (
               <tr>
                 <td colSpan={11} className="px-3 py-8 text-center text-zinc-500">
-                  No open option positions for this expiry.
+                  {rowSummary.total === 0
+                    ? "No open option positions for this expiry."
+                    : `No positions within ${threshold}% of spot for this expiry.`}
                 </td>
               </tr>
             ) : (
-              activeGroup.rows.flatMap((row, index) => {
+              rowSummary.visibleEntries.flatMap(({ row, index }) => {
                 const key = rowKey(row, index);
                 const expanded = expandedRows.has(key);
                 const callHighlighted = shouldHighlightSide(row.call?.pctNear, threshold);
@@ -392,7 +490,10 @@ export function MonitorDashboard({
                     <td
                       className={`border-b border-zinc-100 px-3 py-2 font-medium${highlighted ? " text-red-600" : " text-zinc-900"}`}
                     >
-                      {row.company}
+                      <span className="inline-flex items-center gap-2">
+                        <span>{row.company}</span>
+                        <AccountDots details={row.details} />
+                      </span>
                     </td>
                     <td className="border-b border-zinc-100 px-3 py-2">
                       {formatNumber(row.spot)}
