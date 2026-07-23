@@ -8,6 +8,7 @@ const THRESHOLD_KEY = "near_expiry_highlight_threshold";
 const SHOW_NEAR_ONLY_KEY = "near_expiry_show_near_only";
 
 type MonitorDashboardProps = {
+  active?: boolean;
   highlightDefault: number;
   onLogout: () => void;
   onLoginRequired: () => void;
@@ -132,6 +133,7 @@ function SideCells({
 }
 
 export function MonitorDashboard({
+  active = true,
   highlightDefault,
   onLogout,
   onLoginRequired,
@@ -141,6 +143,9 @@ export function MonitorDashboard({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [pageVisible, setPageVisible] = useState(
+    () => typeof document === "undefined" || document.visibilityState === "visible",
+  );
   const [selectedExpiry, setSelectedExpiry] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(() => readStoredThreshold(highlightDefault));
   const [thresholdInput, setThresholdInput] = useState(() =>
@@ -149,6 +154,15 @@ export function MonitorDashboard({
   const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
   const [showNearOnly, setShowNearOnly] = useState(() => readStoredShowNearOnly());
+
+  useEffect(() => {
+    const syncVisibility = () => {
+      setPageVisible(document.visibilityState === "visible");
+    };
+    syncVisibility();
+    document.addEventListener("visibilitychange", syncVisibility);
+    return () => document.removeEventListener("visibilitychange", syncVisibility);
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(THRESHOLD_KEY, String(threshold));
@@ -196,20 +210,23 @@ export function MonitorDashboard({
   }, [onLoginRequired]);
 
   useEffect(() => {
-    // Initial monitor snapshot fetch after authenticated shell mounts.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional mount fetch
+    if (!active || !pageVisible) {
+      return;
+    }
+    // Fetch when the monitor view is shown and the browser tab is focused.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional visibility fetch
     void refresh();
-  }, [refresh]);
+  }, [active, pageVisible, refresh]);
 
   useEffect(() => {
-    if (!autoRefresh) {
+    if (!autoRefresh || !active || !pageVisible) {
       return;
     }
     const timer = window.setInterval(() => {
       void refresh();
     }, 60_000);
     return () => window.clearInterval(timer);
-  }, [autoRefresh, refresh]);
+  }, [autoRefresh, active, pageVisible, refresh]);
 
   const activeGroup = useMemo(() => {
     if (!snapshot) {
@@ -361,7 +378,7 @@ export function MonitorDashboard({
               })
             : "—"}
         </span>
-        {autoRefresh && nextRefreshAt ? (
+        {autoRefresh && active && pageVisible && nextRefreshAt ? (
           <span>Next refresh around {new Date(nextRefreshAt).toLocaleTimeString("en-IN")}</span>
         ) : null}
       </div>

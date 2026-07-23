@@ -151,6 +151,7 @@ export function AppShell() {
       </div>
       <div className={tab === "monitor" ? undefined : "hidden"}>
         <MonitorDashboard
+          active={tab === "monitor"}
           highlightDefault={auth.highlightDefault}
           onLogout={() => void loadStatus()}
           onLoginRequired={() => void loadStatus()}
