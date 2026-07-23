@@ -562,12 +562,6 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     settings,
   ]);
 
-  async function logout() {
-    abortRef.current?.abort();
-    await fetch("/api/auth/logout", { method: "POST" });
-    onLogout();
-  }
-
   const running = progress.status === "running";
 
   const sortedRows = useMemo(() => {
