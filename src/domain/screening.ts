@@ -37,7 +37,7 @@ export function calendarDaysLeft(expiryIso: string, now = new Date()): number {
     return 0;
   }
   const todayUtc = istTodayUtc(now);
-  const diffDays = Math.ceil((expiryUtc - todayUtc) / 86_400_000);
+  const diffDays = Math.floor((expiryUtc - todayUtc) / 86_400_000) + 1;
   return Math.max(diffDays, 1);
 }
 
@@ -47,11 +47,11 @@ export function workingDaysLeft(expiryIso: string, now = new Date()): number {
     return 0;
   }
   const todayUtc = istTodayUtc(now);
-  if (expiryUtc <= todayUtc) {
+  if (expiryUtc < todayUtc) {
     return 1;
   }
   let count = 0;
-  for (let dayMs = todayUtc + 86_400_000; dayMs <= expiryUtc; dayMs += 86_400_000) {
+  for (let dayMs = todayUtc; dayMs <= expiryUtc; dayMs += 86_400_000) {
     const dayOfWeek = new Date(dayMs).getUTCDay();
     if (dayOfWeek !== 0 && dayOfWeek !== 6) {
       count += 1;

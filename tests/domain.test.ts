@@ -307,10 +307,10 @@ describe("screening math", () => {
     expect(calculateSpreadPct("PUT", 1100, 1000)).toBeNull();
   });
 
-  it("counts calendar and weekday days to expiry in IST", () => {
+  it("counts calendar and weekday days to expiry in IST including today", () => {
     const now = new Date("2026-07-22T10:00:00+05:30");
-    expect(calendarDaysLeft("2026-07-28", now)).toBe(6);
-    expect(workingDaysLeft("2026-07-28", now)).toBe(4);
+    expect(calendarDaysLeft("2026-07-28", now)).toBe(7);
+    expect(workingDaysLeft("2026-07-28", now)).toBe(5);
     expect(calendarDaysLeft("2026-07-22", now)).toBe(1);
     expect(workingDaysLeft("2026-07-22", now)).toBe(1);
   });
