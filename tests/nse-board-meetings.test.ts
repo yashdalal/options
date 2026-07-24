@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addMonthsIso,
   buildNextBoardMeetingBySymbol,
+  buildNseBoardMeetingFeedUrl,
   formatNseQueryDate,
   indiaTodayIso,
   normalizeCorporateBoardMeetingRows,
@@ -37,6 +38,29 @@ describe("formatNseQueryDate / addMonthsIso", () => {
 
   it("adds calendar months in UTC", () => {
     expect(addMonthsIso("2026-07-23", 3)).toBe("2026-10-23");
+  });
+});
+
+describe("buildNseBoardMeetingFeedUrl", () => {
+  it("includes from/to dates so today's meetings are not dropped", () => {
+    expect(buildNseBoardMeetingFeedUrl("event-calendar", "2026-07-23")).toBe(
+      "https://www.nseindia.com/api/event-calendar?index=equities&from_date=23-07-2026&to_date=23-10-2026",
+    );
+    expect(
+      buildNseBoardMeetingFeedUrl("corporate-board-meetings", "2026-07-23"),
+    ).toBe(
+      "https://www.nseindia.com/api/corporate-board-meetings?index=equities&from_date=23-07-2026&to_date=23-10-2026",
+    );
+  });
+
+  it("does not restrict to fo_sec so F&O underlyings NSE omits from that filter still resolve", () => {
+    const eventUrl = buildNseBoardMeetingFeedUrl("event-calendar", "2026-07-23");
+    const corporateUrl = buildNseBoardMeetingFeedUrl(
+      "corporate-board-meetings",
+      "2026-07-23",
+    );
+    expect(eventUrl).not.toContain("fo_sec");
+    expect(corporateUrl).not.toContain("fo_sec");
   });
 });
 
