@@ -12,8 +12,8 @@ export async function GET(): Promise<Response> {
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(getSessionCookieName())?.value;
-    const sessions = requireConnectedAccounts(sessionId);
-    const snapshot = await getMonitorSnapshot(sessions, requestId);
+    const sessions = await requireConnectedAccounts(sessionId);
+    const snapshot = await getMonitorSnapshot(sessions, requestId, sessionId);
     return NextResponse.json(snapshot);
   } catch (error) {
     const status =

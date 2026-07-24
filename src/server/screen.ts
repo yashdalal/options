@@ -124,6 +124,7 @@ export async function getScreenSnapshot(
   sessions: Record<AccountId, TradeSessionCredentials>,
   query: ScreenQuery,
   requestId: string,
+  sessionId?: string,
 ): Promise<ScreenSnapshot> {
   const session = firstSession(sessions);
   logInfo("Building screen snapshot", {
@@ -169,7 +170,11 @@ export async function getScreenSnapshot(
     ]);
     spot = spotQuotes[0]?.spot ?? null;
   } catch (error) {
-    handleBrokerAuthFailure(ACCOUNT_DEFINITIONS[0].id, error);
+    await handleBrokerAuthFailure(
+      sessionId,
+      ACCOUNT_DEFINITIONS[0].id,
+      error,
+    );
   }
 
   let priceRanges = emptyPriceRanges();
@@ -325,6 +330,7 @@ export async function getScreenMargins(
   items: MarginRequestItem[],
   accountId: string | undefined,
   requestId: string,
+  sessionId?: string,
 ): Promise<{ id?: string; instrumentToken: string; margin: number | null; error?: string }[]> {
   const { accountId: resolvedAccountId, session } = resolveAccountSession(
     sessions,
@@ -361,7 +367,7 @@ export async function getScreenMargins(
           "code" in error &&
           (error as { code: string }).code === "session_expired"
         ) {
-          handleBrokerAuthFailure(resolvedAccountId, error);
+          await handleBrokerAuthFailure(sessionId, resolvedAccountId, error);
         }
         return {
           id: item.id,

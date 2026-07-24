@@ -12,6 +12,11 @@ import {
 import { isKotakApiError } from "./kotak/errors";
 import { mapLoginError } from "./login-errors";
 import { logInfo, logWarn } from "./logging";
+import {
+  deleteSession,
+  readSession,
+  writeSession,
+} from "./session-store";
 
 export type AccountConnectionStatus = "connected" | "disconnected" | "expired";
 
@@ -34,10 +39,6 @@ export type SessionStoreState =
   | { status: "partial"; session: AggregateSession }
   | { status: "ready"; session: AggregateSession };
 
-type SessionStore = {
-  current: SessionStoreState;
-};
-
 export type AccountLoginResult = {
   accountId: AccountId;
   label: string;
@@ -50,17 +51,6 @@ export type EstablishSessionResult = {
   ready: boolean;
   accounts: AccountLoginResult[];
 };
-
-const globalStore = globalThis as typeof globalThis & {
-  __nearExpirySessionStore?: SessionStore;
-};
-
-function getStore(): SessionStore {
-  if (!globalStore.__nearExpirySessionStore) {
-    globalStore.__nearExpirySessionStore = { current: { status: "logged_out" } };
-  }
-  return globalStore.__nearExpirySessionStore;
-}
 
 function emptyAccountSlots(): Record<AccountId, AccountSessionSlot> {
   const slots = {} as Record<AccountId, AccountSessionSlot>;
@@ -103,18 +93,6 @@ function deriveStoreStatus(session: AggregateSession): SessionStoreState {
     : { status: "partial", session };
 }
 
-function getOrCreateSession(): AggregateSession {
-  const state = getStore().current;
-  if (state.status === "partial" || state.status === "ready") {
-    return cloneSession(state.session);
-  }
-  return {
-    id: randomUUID(),
-    createdAt: Date.now(),
-    accounts: emptyAccountSlots(),
-  };
-}
-
 function toPublicAccount(slot: AccountSessionSlot): AccountLoginResult {
   return {
     accountId: slot.accountId,
@@ -124,8 +102,31 @@ function toPublicAccount(slot: AccountSessionSlot): AccountLoginResult {
   };
 }
 
-export function listPublicAccountStatuses(): AccountLoginResult[] {
-  const state = getStore().current;
+function loginRequiredError(accountId?: AccountId): Error {
+  return Object.assign(new Error("Login required"), {
+    status: 401,
+    code: "login_required",
+    accountId,
+  });
+}
+
+export async function getSessionState(
+  sessionId: string | undefined,
+): Promise<SessionStoreState> {
+  if (!sessionId) {
+    return { status: "logged_out" };
+  }
+  const session = await readSession(sessionId);
+  if (!session) {
+    return { status: "logged_out" };
+  }
+  return deriveStoreStatus(session);
+}
+
+export async function listPublicAccountStatuses(
+  sessionId: string | undefined,
+): Promise<AccountLoginResult[]> {
+  const state = await getSessionState(sessionId);
   if (state.status === "logged_out") {
     return ACCOUNT_DEFINITIONS.map((definition) => ({
       accountId: definition.id,
@@ -138,51 +139,45 @@ export function listPublicAccountStatuses(): AccountLoginResult[] {
   );
 }
 
-export function getSessionState(): SessionStoreState {
-  return getStore().current;
-}
-
-export function getActiveSessionId(): string | null {
-  const state = getStore().current;
-  if (state.status === "partial" || state.status === "ready") {
-    return state.session.id;
-  }
-  return null;
-}
-
-export function isFullyAuthenticated(sessionId: string | undefined): boolean {
-  const state = getStore().current;
-  return (
-    Boolean(sessionId) &&
-    state.status === "ready" &&
-    state.session.id === sessionId
-  );
-}
-
-export function markAccountExpired(
+export async function markAccountExpired(
+  sessionId: string | undefined,
   accountId: AccountId,
   reason = "session_expired",
-): void {
-  const state = getStore().current;
-  if (state.status !== "partial" && state.status !== "ready") {
+): Promise<void> {
+  if (!sessionId) {
+    return;
+  }
+  const existing = await readSession(sessionId);
+  if (!existing) {
     return;
   }
 
-  const session = cloneSession(state.session);
+  const session = cloneSession(existing);
   session.accounts[accountId] = {
     ...session.accounts[accountId],
     status: "expired",
     credentials: null,
     reason,
   };
-  getStore().current = deriveStoreStatus(session);
-  logWarn("Broker account session expired", { accountId, reason });
+  await writeSession(session);
+  logWarn("Broker account session expired", { accountId, reason, sessionId });
 }
 
 export async function establishSession(
   totps: Partial<Record<AccountId, string>>,
+  existingSessionId?: string,
 ): Promise<EstablishSessionResult> {
-  const session = getOrCreateSession();
+  const existing = existingSessionId
+    ? await readSession(existingSessionId)
+    : null;
+  const session = existing
+    ? cloneSession(existing)
+    : {
+        id: randomUUID(),
+        createdAt: Date.now(),
+        accounts: emptyAccountSlots(),
+      };
+
   const accountsToLogin = ACCOUNT_DEFINITIONS.filter((definition) => {
     const totp = totps[definition.id];
     if (!totp) {
@@ -230,7 +225,8 @@ export async function establishSession(
     }),
   );
 
-  getStore().current = deriveStoreStatus(session);
+  await writeSession(session);
+  const state = deriveStoreStatus(session);
 
   const publicAccounts = ACCOUNT_DEFINITIONS.map((definition) => {
     const attempted = results.find(
@@ -241,63 +237,67 @@ export async function establishSession(
 
   return {
     sessionId: session.id,
-    ready: getStore().current.status === "ready",
+    ready: state.status === "ready",
     accounts: publicAccounts,
   };
 }
 
-export async function clearSession(): Promise<void> {
-  const state = getStore().current;
-  if (state.status === "partial" || state.status === "ready") {
+export async function clearSession(sessionId: string | undefined): Promise<void> {
+  if (!sessionId) {
+    return;
+  }
+
+  const existing = await readSession(sessionId);
+  if (existing) {
     await Promise.all(
       listAccountCredentials().map(async (account) => {
-        const slot = state.session.accounts[account.id];
+        const slot = existing.accounts[account.id];
         if (slot.credentials) {
           await logoutSession(slot.credentials);
         }
       }),
     );
   }
-  getStore().current = { status: "logged_out" };
-  logInfo("Kotak sessions cleared");
+  await deleteSession(sessionId);
+  logInfo("Kotak sessions cleared", { sessionId });
 }
 
-export function requireConnectedAccounts(
+export async function requireConnectedAccounts(
   sessionId: string | undefined,
-): Record<AccountId, TradeSessionCredentials> {
-  const state = getStore().current;
-  if (!sessionId || state.status !== "ready" || state.session.id !== sessionId) {
-    throw Object.assign(new Error("Login required"), {
-      status: 401,
-      code: "login_required",
-    });
+): Promise<Record<AccountId, TradeSessionCredentials>> {
+  if (!sessionId) {
+    throw loginRequiredError();
+  }
+
+  const existing = await readSession(sessionId);
+  if (!existing) {
+    throw loginRequiredError();
+  }
+
+  const state = deriveStoreStatus(existing);
+  if (state.status !== "ready") {
+    throw loginRequiredError();
   }
 
   const credentials = {} as Record<AccountId, TradeSessionCredentials>;
   for (const definition of ACCOUNT_DEFINITIONS) {
-    const slot = state.session.accounts[definition.id];
+    const slot = existing.accounts[definition.id];
     if (slot.status !== "connected" || !slot.credentials) {
-      throw Object.assign(new Error("Login required"), {
-        status: 401,
-        code: "login_required",
-      });
+      throw loginRequiredError(definition.id);
     }
     credentials[definition.id] = slot.credentials;
   }
   return credentials;
 }
 
-export function handleBrokerAuthFailure(
+export async function handleBrokerAuthFailure(
+  sessionId: string | undefined,
   accountId: AccountId,
   error: unknown,
-): never {
+): Promise<never> {
   if (isKotakApiError(error) && error.code === "session_expired") {
-    markAccountExpired(accountId, "broker_403");
-    throw Object.assign(new Error("Login required"), {
-      status: 401,
-      code: "login_required",
-      accountId,
-    });
+    await markAccountExpired(sessionId, accountId, "broker_403");
+    throw loginRequiredError(accountId);
   }
   throw error;
 }

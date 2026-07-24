@@ -54,10 +54,15 @@ describe("aggregate session", () => {
     loginWithTotp.mockReset();
     logoutSession.mockReset();
     logoutSession.mockResolvedValue(undefined);
-    const globalStore = globalThis as typeof globalThis & {
-      __nearExpirySessionStore?: { current: unknown };
-    };
-    delete globalStore.__nearExpirySessionStore;
+    delete process.env.VERCEL;
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+    const { resetSessionStoreForTests } = await import("@/server/session-store");
+    const { resetRedisClientForTests } = await import("@/server/redis");
+    resetSessionStoreForTests();
+    resetRedisClientForTests();
   });
 
   it("keeps successful accounts when one TOTP fails and allows retry", async () => {
@@ -85,15 +90,19 @@ describe("aggregate session", () => {
       "connected",
     );
 
-    expect(() => session.requireConnectedAccounts(first.sessionId)).toThrow(/Login required/);
+    await expect(session.requireConnectedAccounts(first.sessionId)).rejects.toThrow(
+      /Login required/,
+    );
 
     loginWithTotp.mockResolvedValueOnce(credentials("gopa"));
-    const second = await session.establishSession({ gopa: "444444" });
+    const second = await session.establishSession({ gopa: "444444" }, first.sessionId);
 
     expect(second.ready).toBe(true);
     expect(second.sessionId).toBe(first.sessionId);
     expect(loginWithTotp).toHaveBeenCalledTimes(4);
-    expect(session.requireConnectedAccounts(second.sessionId).gopa.tradingSid).toBe("gopa-sid");
+    expect(
+      (await session.requireConnectedAccounts(second.sessionId)).gopa.tradingSid,
+    ).toBe("gopa-sid");
   });
 
   it("marks only the expired account and re-gates the report", async () => {
@@ -111,12 +120,12 @@ describe("aggregate session", () => {
     });
     expect(established.ready).toBe(true);
 
-    session.markAccountExpired("gopa", "broker_403");
-    expect(() => session.requireConnectedAccounts(established.sessionId)).toThrow(
-      /Login required/,
-    );
+    await session.markAccountExpired(established.sessionId, "gopa", "broker_403");
+    await expect(
+      session.requireConnectedAccounts(established.sessionId),
+    ).rejects.toThrow(/Login required/);
 
-    const statuses = session.listPublicAccountStatuses();
+    const statuses = await session.listPublicAccountStatuses(established.sessionId);
     expect(statuses.find((account) => account.accountId === "prakash")?.status).toBe(
       "connected",
     );
@@ -132,15 +141,25 @@ describe("aggregate session", () => {
       .mockResolvedValueOnce(credentials("gopa"))
       .mockResolvedValueOnce(credentials("huf"));
 
-    await session.establishSession({
+    const established = await session.establishSession({
       prakash: "111111",
       gopa: "222222",
       huf: "333333",
     });
-    await session.clearSession();
+    await session.clearSession(established.sessionId);
 
     expect(logoutSession).toHaveBeenCalledTimes(3);
-    expect(session.getSessionState().status).toBe("logged_out");
-    expect(session.getActiveSessionId()).toBeNull();
+    expect(await session.getSessionState(established.sessionId)).toEqual({
+      status: "logged_out",
+    });
+  });
+
+  it("fails visibly on Vercel when Redis is not configured", async () => {
+    process.env.VERCEL = "1";
+    const store = await import("@/server/session-store");
+    await expect(store.readSession("missing")).rejects.toMatchObject({
+      code: "session_store_unavailable",
+      status: 500,
+    });
   });
 });

@@ -69,11 +69,12 @@ See [docs/kotak-contract.md](docs/kotak-contract.md) for endpoint notes and open
 - `src/config/accounts.ts` — hardcoded account IDs/labels (Prakash, Gopa, HUF)
 - `src/domain` — pure normalization, pairing, proximity math
 - `src/server/kotak` — broker adapters
-- `src/server/session.ts` — in-memory aggregate session with one broker session per account
+- `src/server/session.ts` — aggregate session with one broker session per account (Redis-backed on Vercel)
+- `src/server/session-store.ts` — Upstash Redis persistence with local in-memory fallback
 - `src/server/monitor.ts` — multi-account snapshot orchestration with request dedupe
 - `src/app/api` — same-origin auth/monitor routes
 - `tests/fixtures/kotak` — sanitized fixtures
 
 ## Future hosting
 
-Prefer a persistent Node process / small VPS over serverless so the in-memory multi-account session and scrip-master cache remain simple. Keep REST polling as the correctness baseline before adding WebSockets.
+On Vercel, connect **Upstash Redis** so login sessions are shared across serverless instances. Local `npm run dev` can run without Redis (single process memory). Keep REST polling as the correctness baseline before adding WebSockets.

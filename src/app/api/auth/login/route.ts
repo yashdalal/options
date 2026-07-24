@@ -38,8 +38,12 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const result = await establishSession(parsed.data.totps);
     const cookieStore = await cookies();
+    const existingSessionId = cookieStore.get(getSessionCookieName())?.value;
+    const result = await establishSession(
+      parsed.data.totps,
+      existingSessionId,
+    );
     cookieStore.set(getSessionCookieName(), result.sessionId, {
       httpOnly: true,
       sameSite: "lax",

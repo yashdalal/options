@@ -48,7 +48,7 @@ export async function GET(): Promise<Response> {
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(getSessionCookieName())?.value;
-    const sessions = requireConnectedAccounts(sessionId);
+    const sessions = await requireConnectedAccounts(sessionId);
     const meta = await getScreenMeta(sessions);
     return NextResponse.json(meta);
   } catch (error) {

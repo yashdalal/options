@@ -36,6 +36,7 @@ function sessionKey(sessions: Record<AccountId, TradeSessionCredentials>): strin
 async function buildSnapshot(
   sessions: Record<AccountId, TradeSessionCredentials>,
   requestId: string,
+  sessionId: string | undefined,
 ): Promise<MonitorSnapshot> {
   logInfo("Reading positions...", {
     requestId,
@@ -64,7 +65,7 @@ async function buildSnapshot(
           positions,
         };
       } catch (error) {
-        handleBrokerAuthFailure(definition.id, error);
+        await handleBrokerAuthFailure(sessionId, definition.id, error);
         throw error;
       }
     }),
@@ -160,6 +161,7 @@ async function buildSnapshot(
 export async function getMonitorSnapshot(
   sessions: Record<AccountId, TradeSessionCredentials>,
   requestId: string,
+  sessionId?: string,
 ): Promise<MonitorSnapshot> {
   const key = sessionKey(sessions);
   if (inFlight && inFlightSessionKey === key) {
@@ -169,7 +171,7 @@ export async function getMonitorSnapshot(
   inFlightSessionKey = key;
   inFlight = (async () => {
     try {
-      return await buildSnapshot(sessions, requestId);
+      return await buildSnapshot(sessions, requestId, sessionId);
     } finally {
       inFlight = null;
       inFlightSessionKey = null;
