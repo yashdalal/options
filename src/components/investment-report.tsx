@@ -865,7 +865,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-sm text-zinc-800"
                 title={companyChoiceLabel(symbol, nameByUnderlying)}
               >
-                {companyChoiceLabel(symbol, nameByUnderlying)}
+                {symbol}
                 <button
                   type="button"
                   onClick={() => removeCompany(symbol)}
