@@ -44,6 +44,7 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and connect each account wit
 | `npm test` | Unit tests |
 | `npm run test:e2e` | Playwright smoke test |
 | `npm run probe:kotak` | Live Kotak contract probe |
+| `npm run probe:session-store` | Live Upstash Redis session roundtrip |
 
 ### Live probe
 
@@ -54,6 +55,14 @@ npm run probe:kotak -- --account=gopa --totp=123456
 ```
 
 The probe authenticates one account, fetches positions/scrip master/quotes, writes a sanitized summary under `.cache/probe/`, and logs out.
+
+### Local Redis session testing
+
+Without Redis env vars, local `npm run dev` uses in-process memory (fine for a single Node process). To exercise the same Redis path as production:
+
+1. Put Upstash credentials in `.env.local` (from the Vercel/Upstash dashboard, or `vercel env pull .env.local`)
+2. Run `npm run probe:session-store` — should print write/read/delete OK
+3. Run `npm run dev`, log in with TOTPs, and confirm the server log shows `Using Upstash Redis for trade session store`
 
 See [docs/kotak-contract.md](docs/kotak-contract.md) for endpoint notes and open questions.
 
