@@ -65,7 +65,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(getSessionCookieName())?.value;
-    const sessions = requireConnectedAccounts(sessionId);
+    const sessions = await requireConnectedAccounts(sessionId);
     const json = await request.json();
     const parsed = bodySchema.safeParse(json);
     if (!parsed.success) {
@@ -80,6 +80,7 @@ export async function POST(request: Request): Promise<Response> {
       parsed.data.items,
       parsed.data.accountId,
       requestId,
+      sessionId,
     );
     return NextResponse.json({ margins });
   } catch (error) {

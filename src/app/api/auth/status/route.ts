@@ -5,47 +5,24 @@ import {
 } from "@/config/accounts";
 import { getHighlightDefault, getSessionCookieName, hasKotakCredentials } from "@/config/env";
 import {
-  getActiveSessionId,
   getSessionState,
   listPublicAccountStatuses,
 } from "@/server/session";
 
 export async function GET(): Promise<Response> {
   const cookieStore = await cookies();
-  const activeSessionId = getActiveSessionId();
-  const state = getSessionState();
-  let cookieSessionId = cookieStore.get(getSessionCookieName())?.value;
-
-  if (
-    state.status === "ready" &&
-    activeSessionId &&
-    cookieSessionId !== activeSessionId
-  ) {
-    cookieStore.set(getSessionCookieName(), activeSessionId, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 12,
-    });
-    cookieSessionId = activeSessionId;
-  }
-
-  const cookieMatches =
-    Boolean(cookieSessionId) &&
-    Boolean(activeSessionId) &&
-    cookieSessionId === activeSessionId;
-
-  const accounts = cookieMatches
-    ? listPublicAccountStatuses()
-    : ACCOUNT_DEFINITIONS.map((definition) => ({
-        accountId: definition.id,
-        label: definition.label,
-        status: "disconnected" as const,
-      }));
+  const sessionId = cookieStore.get(getSessionCookieName())?.value;
+  const state = await getSessionState(sessionId);
+  const accounts =
+    state.status === "logged_out"
+      ? ACCOUNT_DEFINITIONS.map((definition) => ({
+          accountId: definition.id,
+          label: definition.label,
+          status: "disconnected" as const,
+        }))
+      : await listPublicAccountStatuses(sessionId);
 
   const authenticated =
-    cookieMatches &&
     state.status === "ready" &&
     accounts.every((account) => account.status === "connected");
 
@@ -57,7 +34,7 @@ export async function GET(): Promise<Response> {
       ? "ready"
       : expired
         ? "expired"
-        : state.status === "partial" && cookieMatches
+        : state.status === "partial"
           ? "partial"
           : "logged_out",
     highlightDefault: getHighlightDefault(),

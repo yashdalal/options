@@ -64,7 +64,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(getSessionCookieName())?.value;
-    const sessions = requireConnectedAccounts(sessionId);
+    const sessions = await requireConnectedAccounts(sessionId);
     const url = new URL(request.url);
     const symbol = (url.searchParams.get("symbol") ?? "").trim().toUpperCase();
     const expiryIso = (url.searchParams.get("expiry") ?? "").trim();
@@ -86,6 +86,7 @@ export async function GET(request: Request): Promise<Response> {
         lots: Math.max(1, Math.floor(parseNumber(url.searchParams.get("lots"), 1))),
       },
       requestId,
+      sessionId,
     );
     return NextResponse.json(snapshot);
   } catch (error) {
