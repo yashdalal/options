@@ -26,9 +26,9 @@ import {
   filterCompanyChoices,
   listExpiriesForSelection,
   listUniqueExpiries,
-  runPool,
   screenCompany,
 } from "@/lib/screen-company";
+import { runInvestmentReport } from "@/lib/investment-report-runner";
 import { NumberInput } from "@/components/number-input";
 import { PriceRangeBars, optionSideBadgeClass, optionSideTextClass } from "@/components/price-range-bars";
 
@@ -36,7 +36,7 @@ const REPORT_CONCURRENCY = 2;
 const MAX_SELECTED_COMPANIES = 30;
 const EMPTY_NAME_BY_UNDERLYING: Record<string, string> = {};
 
-type ReportSortKey = "company" | "return";
+type ReportSortKey = "company" | "spread" | "return";
 type ReportSortDir = "asc" | "desc";
 
 type InvestmentReportProps = {
@@ -139,6 +139,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   const [sortDir, setSortDir] = useState<ReportSortDir>("asc");
   const [helpOpen, setHelpOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const runGenerationRef = useRef(0);
   const startedAtRef = useRef<number | null>(null);
   const companyPickerRef = useRef<HTMLDivElement | null>(null);
   const highlightOptionRef = useRef<HTMLButtonElement | null>(null);
@@ -382,6 +383,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const runId = ++runGenerationRef.current;
+    const isCurrent = () => runId === runGenerationRef.current;
     startedAtRef.current = Date.now();
     setElapsedMs(null);
 
@@ -402,145 +405,80 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       currentSymbol: companies[0] ?? null,
     });
 
-    const collected: InvestmentReportRow[] = [];
-    let processed = 0;
-    let failed = 0;
-
-    try {
-      await runPool(
-        companies,
-        REPORT_CONCURRENCY,
-        async (symbol) => {
-          if (controller.signal.aborted) {
-            throw new DOMException("Aborted", "AbortError");
-          }
-          setProgress((current) => ({
+    const result = await runInvestmentReport({
+      companies,
+      concurrency: REPORT_CONCURRENCY,
+      controller,
+      skipped: eligibility.skipped,
+      expiryIso: selectedExpiry,
+      isCurrent,
+      screenCompany: (symbol, signal) =>
+        screenCompany({
+          symbol,
+          expiryIso: selectedExpiry,
+          spreadMin: settings.spreadMin,
+          returnMin: settings.returnMin,
+          side: settings.side,
+          lots: settings.lots,
+          accountId: settings.accountId,
+          signal,
+        }),
+      onProgress: (next) => {
+        if (!isCurrent()) {
+          return;
+        }
+        setProgress(next);
+      },
+      onRows: (next) => {
+        if (!isCurrent()) {
+          return;
+        }
+        setRows(next);
+      },
+      onCompanyMeta: (companyMeta) => {
+        if (!isCurrent()) {
+          return;
+        }
+        if (companyMeta.priceRanges) {
+          setPriceRangesByCompany((current) => ({
             ...current,
-            currentSymbol: symbol,
+            [companyMeta.symbol]: companyMeta.priceRanges!,
           }));
-          try {
-            const result = await screenCompany({
-              symbol,
-              expiryIso: selectedExpiry,
-              spreadMin: settings.spreadMin,
-              returnMin: settings.returnMin,
-              side: settings.side,
-              lots: settings.lots,
-              accountId: settings.accountId,
-              signal: controller.signal,
-            });
-            if (result.snapshot.priceRanges) {
-              setPriceRangesByCompany((current) => ({
-                ...current,
-                [symbol]: result.snapshot.priceRanges!,
-              }));
-            }
-            if (result.snapshot.priceRangesError) {
-              setPriceRangesErrorByCompany((current) => ({
-                ...current,
-                [symbol]: result.snapshot.priceRangesError!,
-              }));
-            }
-            if (result.snapshot.boardMeeting) {
-              setBoardMeetingByCompany((current) => ({
-                ...current,
-                [symbol]: result.snapshot.boardMeeting!,
-              }));
-            }
-            if (result.snapshot.boardMeetingError) {
-              setBoardMeetingErrorByCompany((current) => ({
-                ...current,
-                [symbol]: result.snapshot.boardMeetingError!,
-              }));
-            }
-            const nextRows = result.qualifying.map((candidate) => ({
-              ...candidate,
-              spot: candidate.spot,
-            }));
-            collected.push(...nextRows);
-            collected.sort((left, right) => {
-              if (left.company !== right.company) {
-                return left.company.localeCompare(right.company);
-              }
-              if (left.optionType !== right.optionType) {
-                return left.optionType.localeCompare(right.optionType);
-              }
-              const leftReturn = left.annualizedReturnPct ?? -Infinity;
-              const rightReturn = right.annualizedReturnPct ?? -Infinity;
-              if (leftReturn !== rightReturn) {
-                return rightReturn - leftReturn;
-              }
-              return left.strike - right.strike;
-            });
-            setRows([...collected]);
-          } catch (err) {
-            if (
-              typeof err === "object" &&
-              err &&
-              "kind" in err &&
-              (err as { kind?: string }).kind === "auth"
-            ) {
-              throw err;
-            }
-            if (err instanceof DOMException && err.name === "AbortError") {
-              throw err;
-            }
-            failed += 1;
-          } finally {
-            processed += 1;
-            setProgress((current) => ({
-              ...current,
-              processed,
-              failed,
-              qualifyingCount: collected.length,
-            }));
-          }
-        },
-        controller.signal,
-      );
+        }
+        if (companyMeta.priceRangesError) {
+          setPriceRangesErrorByCompany((current) => ({
+            ...current,
+            [companyMeta.symbol]: companyMeta.priceRangesError!,
+          }));
+        }
+        if (companyMeta.boardMeeting) {
+          setBoardMeetingByCompany((current) => ({
+            ...current,
+            [companyMeta.symbol]: companyMeta.boardMeeting!,
+          }));
+        }
+        if (companyMeta.boardMeetingError) {
+          setBoardMeetingErrorByCompany((current) => ({
+            ...current,
+            [companyMeta.symbol]: companyMeta.boardMeetingError!,
+          }));
+        }
+      },
+    });
 
-      if (!controller.signal.aborted) {
-        finishElapsed();
-        setProgress((current) => ({
-          ...current,
-          status: "completed",
-          currentSymbol: null,
-          processed,
-          failed,
-          qualifyingCount: collected.length,
-        }));
-      }
-    } catch (err) {
-      if (
-        typeof err === "object" &&
-        err &&
-        "kind" in err &&
-        (err as { kind?: string }).kind === "auth"
-      ) {
-        finishElapsed();
-        onLoginRequired();
-        setProgress((current) => ({
-          ...current,
-          status: "cancelled",
-          currentSymbol: null,
-        }));
-        return;
-      }
-      if (err instanceof DOMException && err.name === "AbortError") {
-        finishElapsed();
-        return;
-      }
-      finishElapsed();
+    if (!isCurrent()) {
+      return;
+    }
+
+    finishElapsed();
+    if (result.reason === "auth") {
+      onLoginRequired();
+    } else if (result.reason === "unexpected") {
       setError("Report stopped due to an unexpected error.");
-      setProgress((current) => ({
-        ...current,
-        status: "cancelled",
-        currentSymbol: null,
-      }));
-    } finally {
-      if (abortRef.current === controller) {
-        abortRef.current = null;
-      }
+    }
+
+    if (abortRef.current === controller) {
+      abortRef.current = null;
     }
   }, [
     eligibility.skipped,
@@ -570,6 +508,18 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         return rightReturn - leftReturn;
       }
 
+      if (sortKey === "spread") {
+        const spreadCmp = left.spreadPct - right.spreadPct;
+        if (spreadCmp !== 0) {
+          return sortDir === "asc" ? spreadCmp : -spreadCmp;
+        }
+        const companyCmp = left.company.localeCompare(right.company);
+        if (companyCmp !== 0) {
+          return companyCmp;
+        }
+        return left.optionType.localeCompare(right.optionType);
+      }
+
       const leftReturn = left.annualizedReturnPct ?? -Infinity;
       const rightReturn = right.annualizedReturnPct ?? -Infinity;
       const returnCmp = leftReturn - rightReturn;
@@ -591,7 +541,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       return;
     }
     setSortKey(nextKey);
-    setSortDir(nextKey === "return" ? "desc" : "asc");
+    setSortDir(nextKey === "company" ? "asc" : "desc");
   }
 
   return (
@@ -1061,7 +1011,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 ? `Screening ${progress.currentSymbol ?? "…"}`
                 : progress.status === "cancelled"
                   ? "Cancelled"
-                  : "Completed"}
+                  : progress.status === "error"
+                    ? "Error"
+                    : "Completed"}
           </span>
         </div>
       </div>
@@ -1075,11 +1027,13 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
               ? `${rows.length} options meet min spread and min return across ${progress.eligible - progress.failed} companies.${elapsedMs === null ? "" : ` Report took ${formatDuration(elapsedMs)} to generate.`}`
               : progress.status === "cancelled"
                 ? `Stopped after ${progress.processed} companies. ${rows.length} qualifying options kept.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
-                : selectedCompanies.length > 0 && expiries.length === 0
-                  ? "No shared expiry across the selected companies. Remove a name or clear the list to continue."
-                  : selectedCompanies.length > 0
-                    ? `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"} on ${formatExpiryLabel(selectedExpiry)}.`
-                    : `Pick up to ${MAX_SELECTED_COMPANIES} companies, then run the report.`}
+                : progress.status === "error"
+                  ? `Stopped after ${progress.processed} companies due to an error. ${rows.length} qualifying options kept.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
+                  : selectedCompanies.length > 0 && expiries.length === 0
+                    ? "No shared expiry across the selected companies. Remove a name or clear the list to continue."
+                    : selectedCompanies.length > 0
+                      ? `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"} on ${formatExpiryLabel(selectedExpiry)}.`
+                      : `Pick up to ${MAX_SELECTED_COMPANIES} companies, then run the report.`}
       </p>
 
       <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
@@ -1092,7 +1046,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   { heading: "Spot" },
                   { heading: "Strike" },
                   { heading: "Lots" },
-                  { heading: "Spread %" },
+                  { heading: "Spread %", sort: "spread" as const },
                   { heading: "Ann. return %", sort: "return" as const },
                   { heading: "Diff ₹", title: "|strike − spot|" },
                   { heading: "Bid" },

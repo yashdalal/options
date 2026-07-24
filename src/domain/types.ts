@@ -141,7 +141,7 @@ export type ScreenMeta = {
 };
 
 export type InvestmentReportProgress = {
-  status: "idle" | "running" | "cancelled" | "completed";
+  status: "idle" | "running" | "cancelled" | "completed" | "error";
   expiryIso: string;
   eligible: number;
   skipped: number;
