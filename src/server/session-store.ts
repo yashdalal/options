@@ -1,5 +1,5 @@
 import { getRedis, isRedisConfigured } from "./redis";
-import { logError, logWarn } from "./logging";
+import { logError, logInfo, logWarn } from "./logging";
 import type { AggregateSession } from "./session";
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 12;
@@ -23,6 +23,7 @@ function sessionKey(sessionId: string): string {
 }
 
 let warnedAboutMemoryFallback = false;
+let loggedRedisReady = false;
 
 function warnMemoryFallbackOnce(): void {
   if (warnedAboutMemoryFallback) {
@@ -40,9 +41,18 @@ function warnMemoryFallbackOnce(): void {
   );
 }
 
+function logRedisReadyOnce(): void {
+  if (loggedRedisReady) {
+    return;
+  }
+  loggedRedisReady = true;
+  logInfo("Using Upstash Redis for trade session store");
+}
+
 export function resetSessionStoreForTests(): void {
   getMemoryStore().clear();
   warnedAboutMemoryFallback = false;
+  loggedRedisReady = false;
 }
 
 export async function readSession(
@@ -63,6 +73,7 @@ export async function readSession(
   }
 
   try {
+    logRedisReadyOnce();
     const value = await redis.get<AggregateSession>(sessionKey(sessionId));
     return value ?? null;
   } catch (error) {
@@ -95,6 +106,7 @@ export async function writeSession(session: AggregateSession): Promise<void> {
   }
 
   try {
+    logRedisReadyOnce();
     await redis.set(sessionKey(session.id), session, {
       ex: SESSION_TTL_SECONDS,
     });
@@ -119,6 +131,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }
 
   try {
+    logRedisReadyOnce();
     await redis.del(sessionKey(sessionId));
   } catch (error) {
     logError("Failed to delete session from Redis", {
