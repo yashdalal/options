@@ -13,6 +13,14 @@ export function canApplyThresholds(run: ThresholdPair, draft: ThresholdPair): bo
   return draft.spreadMin >= run.spreadMin && draft.returnMin >= run.returnMin;
 }
 
+export function shouldFilterThresholdsOnly(
+  run: ThresholdPair,
+  applied: ThresholdPair,
+  draft: ThresholdPair,
+): boolean {
+  return canApplyThresholds(run, draft) && !thresholdsEqual(applied, draft);
+}
+
 export function filterRowsByThresholds<T extends Pick<InvestmentReportRow, "spreadPct" | "annualizedReturnPct">>(
   rows: T[],
   thresholds: ThresholdPair,

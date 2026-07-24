@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canApplyThresholds,
   filterRowsByThresholds,
+  shouldFilterThresholdsOnly,
   thresholdsEqual,
 } from "@/lib/report-threshold-filter";
 
@@ -19,6 +20,31 @@ describe("canApplyThresholds", () => {
     expect(canApplyThresholds(run, { spreadMin: 7, returnMin: 12 })).toBe(false);
     expect(canApplyThresholds(run, { spreadMin: 8, returnMin: 11 })).toBe(false);
     expect(canApplyThresholds(run, { spreadMin: 7, returnMin: 20 })).toBe(false);
+  });
+});
+
+describe("shouldFilterThresholdsOnly", () => {
+  const run = { spreadMin: 8, returnMin: 12 };
+
+  it("filters when draft tightens relative to applied", () => {
+    expect(
+      shouldFilterThresholdsOnly(run, { spreadMin: 8, returnMin: 12 }, { spreadMin: 10, returnMin: 12 }),
+    ).toBe(true);
+    expect(
+      shouldFilterThresholdsOnly(run, { spreadMin: 10, returnMin: 12 }, { spreadMin: 9, returnMin: 12 }),
+    ).toBe(true);
+  });
+
+  it("does not filter when draft matches applied", () => {
+    expect(
+      shouldFilterThresholdsOnly(run, { spreadMin: 10, returnMin: 12 }, { spreadMin: 10, returnMin: 12 }),
+    ).toBe(false);
+  });
+
+  it("does not filter when draft loosens below the run", () => {
+    expect(
+      shouldFilterThresholdsOnly(run, { spreadMin: 10, returnMin: 12 }, { spreadMin: 7, returnMin: 12 }),
+    ).toBe(false);
   });
 });
 

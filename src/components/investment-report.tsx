@@ -29,8 +29,8 @@ import {
 } from "@/lib/screen-company";
 import { runInvestmentReport } from "@/lib/investment-report-runner";
 import {
-  canApplyThresholds,
   filterRowsByThresholds,
+  shouldFilterThresholdsOnly,
   thresholdsEqual,
   type ThresholdPair,
 } from "@/lib/report-threshold-filter";
@@ -45,9 +45,22 @@ const EMPTY_NAME_BY_UNDERLYING: Record<string, string> = {};
 type ReportSortKey = "company" | "spread" | "return";
 type ReportSortDir = "asc" | "desc";
 
+type ReportRunBasis = {
+  expiryIso: string;
+  companiesKey: string;
+  side: ScreenSideFilter;
+  lots: number;
+  accountId: AccountId;
+  thresholds: ThresholdPair;
+};
+
 type InvestmentReportProps = {
   onLoginRequired: () => void;
 };
+
+function companiesKey(companies: string[]): string {
+  return [...companies].sort().join("\0");
+}
 
 function formatExpiryLabel(expiryIso: string): string {
   const [year, month, day] = expiryIso.split("-").map(Number);
@@ -137,7 +150,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     Record<string, string>
   >({});
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
-  const [runThresholds, setRunThresholds] = useState<ThresholdPair | null>(null);
+  const [runBasis, setRunBasis] = useState<ReportRunBasis | null>(null);
   const [appliedThresholds, setAppliedThresholds] = useState<ThresholdPair | null>(null);
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [companySearch, setCompanySearch] = useState("");
@@ -401,7 +414,14 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       spreadMin: settings.spreadMin,
       returnMin: settings.returnMin,
     };
-    setRunThresholds(thresholds);
+    setRunBasis({
+      expiryIso: selectedExpiry,
+      companiesKey: companiesKey(companies),
+      side: settings.side,
+      lots: settings.lots,
+      accountId: settings.accountId,
+      thresholds,
+    });
     setAppliedThresholds(thresholds);
 
     setError(null);
@@ -508,38 +528,41 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
 
   const running = progress.status === "running";
 
-  useEffect(() => {
-    if (!runThresholds || running || progress.status === "idle") {
-      return;
-    }
-    if (!selectedExpiry || selectedCompanies.length === 0) {
-      return;
-    }
-
+  const applyThresholdsOrRun = useCallback(() => {
     const draft: ThresholdPair = {
       spreadMin: settings.spreadMin,
       returnMin: settings.returnMin,
     };
 
-    if (canApplyThresholds(runThresholds, draft)) {
-      setAppliedThresholds((current) =>
-        current && thresholdsEqual(current, draft) ? current : draft,
-      );
+    if (
+      runBasis &&
+      appliedThresholds &&
+      !running &&
+      progress.status !== "idle" &&
+      selectedExpiry === runBasis.expiryIso &&
+      companiesKey(selectedCompanies) === runBasis.companiesKey &&
+      settings.side === runBasis.side &&
+      settings.lots === runBasis.lots &&
+      settings.accountId === runBasis.accountId &&
+      shouldFilterThresholdsOnly(runBasis.thresholds, appliedThresholds, draft)
+    ) {
+      setAppliedThresholds(draft);
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      void runReport();
-    }, 500);
-    return () => window.clearTimeout(timer);
+    void runReport();
   }, [
+    appliedThresholds,
     progress.status,
+    runBasis,
     runReport,
-    runThresholds,
     running,
-    selectedCompanies.length,
+    selectedCompanies,
     selectedExpiry,
+    settings.accountId,
+    settings.lots,
     settings.returnMin,
+    settings.side,
     settings.spreadMin,
   ]);
 
@@ -598,15 +621,15 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
 
   const qualifyingSummary = useMemo(() => {
     if (
-      runThresholds &&
+      runBasis &&
       appliedThresholds &&
-      !thresholdsEqual(runThresholds, appliedThresholds) &&
+      !thresholdsEqual(runBasis.thresholds, appliedThresholds) &&
       displayedRows.length !== rows.length
     ) {
       return `${displayedRows.length} of ${rows.length} options meet the applied min spread and min return`;
     }
     return `${displayedRows.length} options meet min spread and min return`;
-  }, [appliedThresholds, displayedRows.length, rows.length, runThresholds]);
+  }, [appliedThresholds, displayedRows.length, rows.length, runBasis]);
 
   function toggleSort(nextKey: ReportSortKey) {
     if (sortKey === nextKey) {
@@ -694,7 +717,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
             ) : (
               <button
                 type="button"
-                onClick={() => void runReport()}
+                onClick={applyThresholdsOrRun}
                 disabled={
                   metaLoading || !selectedExpiry || selectedCompanies.length === 0
                 }
@@ -1004,8 +1027,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   <li>
                     An option only qualifies if it meets both the minimum spread and the minimum
                     annualized return after sell charges and broker margin. Every qualifying
-                    strike is shown. After a run, raising either min filters the current results;
-                    lowering either re-screens automatically.
+                    strike is shown. After a run, click Run report again to apply new mins —
+                    raising either filters the current results; lowering either re-screens.
                   </li>
                 </ul>
               </section>
