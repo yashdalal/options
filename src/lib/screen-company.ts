@@ -165,6 +165,21 @@ function companySearchRank(
   return 3;
 }
 
+export function companyMatchesQuery(
+  symbol: string,
+  query: string,
+  nameByUnderlying: Record<string, string> = {},
+): boolean {
+  const normalized = query.trim().toUpperCase();
+  if (!normalized) {
+    return true;
+  }
+  const name = (nameByUnderlying[symbol] ?? "").toUpperCase();
+  return (
+    symbol.toUpperCase().includes(normalized) || name.includes(normalized)
+  );
+}
+
 export function filterCompanyChoices(
   eligible: string[],
   selected: string[],
@@ -194,13 +209,8 @@ export function filterCompanyChoices(
     };
   }
 
-  const matchesQuery = (symbol: string): boolean => {
-    const name = (nameByUnderlying[symbol] ?? "").toUpperCase();
-    return symbol.includes(normalized) || name.includes(normalized);
-  };
-
   const matches = available
-    .filter(matchesQuery)
+    .filter((symbol) => companyMatchesQuery(symbol, query, nameByUnderlying))
     .sort((left, right) => {
       const leftRank = companySearchRank(
         left,
@@ -224,7 +234,7 @@ export function filterCompanyChoices(
       (symbol) =>
         !selectedSet.has(symbol) &&
         !eligibleSet.has(symbol) &&
-        matchesQuery(symbol),
+        companyMatchesQuery(symbol, query, nameByUnderlying),
     )
     .flatMap((symbol) => {
       const expiries = filterExpiriesWithinMonthsAhead(

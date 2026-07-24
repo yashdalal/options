@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MonitorSnapshot, ReportRow, ReportSide } from "@/domain/types";
 import { shouldHighlightRow, shouldHighlightSide } from "@/domain/proximity";
 import { formatNumber, formatPercent, formatRupees } from "@/lib/format";
+import { companyMatchesQuery } from "@/lib/screen-company";
 
 const THRESHOLD_KEY = "near_expiry_highlight_threshold";
 const SHOW_NEAR_ONLY_KEY = "near_expiry_show_near_only";
+const EMPTY_NAME_BY_UNDERLYING: Record<string, string> = {};
 
 type MonitorDashboardProps = {
   active?: boolean;
@@ -94,6 +96,28 @@ function rowKey(row: ReportRow, index: number): string {
   return `${row.company}-${row.call?.strike ?? "x"}-${row.put?.strike ?? "x"}-${index}`;
 }
 
+function emptyRowsMessage(
+  total: number,
+  showNearOnly: boolean,
+  threshold: number,
+  companyQuery: string,
+): string {
+  if (total === 0) {
+    return "No open option positions for this expiry.";
+  }
+  const trimmed = companyQuery.trim();
+  if (trimmed && showNearOnly) {
+    return `No positions matching “${trimmed}” within ${threshold}% of spot for this expiry.`;
+  }
+  if (trimmed) {
+    return `No positions matching “${trimmed}” for this expiry.`;
+  }
+  if (showNearOnly) {
+    return `No positions within ${threshold}% of spot for this expiry.`;
+  }
+  return "No open option positions for this expiry.";
+}
+
 function SideCells({
   side,
   highlighted,
@@ -136,6 +160,7 @@ export function MonitorDashboard({
   const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
   const [showNearOnly, setShowNearOnly] = useState(() => readStoredShowNearOnly());
+  const [companyQuery, setCompanyQuery] = useState("");
 
   useEffect(() => {
     const syncVisibility = () => {
@@ -221,16 +246,22 @@ export function MonitorDashboard({
     );
   }, [snapshot, selectedExpiry]);
 
+  const nameByUnderlying = snapshot?.nameByUnderlying ?? EMPTY_NAME_BY_UNDERLYING;
+
   const rowSummary = useMemo(() => {
     const rows = activeGroup?.rows ?? [];
     const entries = rows.map((row, index) => ({ row, index }));
     const nearEntries = entries.filter(({ row }) => rowMeetsCriteria(row, threshold));
+    const scopedEntries = showNearOnly ? nearEntries : entries;
+    const visibleEntries = scopedEntries.filter(({ row }) =>
+      companyMatchesQuery(row.company, companyQuery, nameByUnderlying),
+    );
     return {
       total: rows.length,
       nearCount: nearEntries.length,
-      visibleEntries: showNearOnly ? nearEntries : entries,
+      visibleEntries,
     };
-  }, [activeGroup, showNearOnly, threshold]);
+  }, [activeGroup, companyQuery, nameByUnderlying, showNearOnly, threshold]);
 
   useEffect(() => {
     // Reset expanded rows when the visible expiry snapshot changes.
@@ -414,6 +445,18 @@ export function MonitorDashboard({
               Near only
             </button>
           </div>
+          <label className="sr-only" htmlFor="near-expiry-company-search">
+            Search by company or ticker
+          </label>
+          <input
+            id="near-expiry-company-search"
+            type="search"
+            value={companyQuery}
+            onChange={(event) => setCompanyQuery(event.target.value)}
+            placeholder="Search company or ticker…"
+            aria-label="Search by company or ticker"
+            className="min-w-[12rem] flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-200 sm:max-w-xs"
+          />
         </div>
       </div>
 
@@ -447,9 +490,12 @@ export function MonitorDashboard({
             {rowSummary.visibleEntries.length === 0 ? (
               <tr>
                 <td colSpan={11} className="px-3 py-8 text-center text-zinc-500">
-                  {rowSummary.total === 0
-                    ? "No open option positions for this expiry."
-                    : `No positions within ${threshold}% of spot for this expiry.`}
+                  {emptyRowsMessage(
+                    rowSummary.total,
+                    showNearOnly,
+                    threshold,
+                    companyQuery,
+                  )}
                 </td>
               </tr>
             ) : (
@@ -460,6 +506,7 @@ export function MonitorDashboard({
                 const putHighlighted = shouldHighlightSide(row.put?.pctNear, threshold);
                 const highlighted = callHighlighted || putHighlighted;
                 const canExpand = row.details.length > 0;
+                const companyName = nameByUnderlying[row.company];
                 const summaryRow = (
                   <tr
                     key={key}
@@ -478,7 +525,16 @@ export function MonitorDashboard({
                       className={`border-b border-zinc-100 px-3 py-2 font-medium${highlighted ? " text-red-600" : " text-zinc-900"}`}
                     >
                       <span className="inline-flex items-center gap-2">
-                        <span>{row.company}</span>
+                        <span
+                          title={
+                            companyName &&
+                            companyName.toUpperCase() !== row.company.toUpperCase()
+                              ? companyName
+                              : undefined
+                          }
+                        >
+                          {row.company}
+                        </span>
                         <AccountDots details={row.details} />
                       </span>
                     </td>

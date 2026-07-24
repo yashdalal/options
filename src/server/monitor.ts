@@ -137,6 +137,13 @@ async function buildSnapshot(
   }
 
   const groups = buildExpiryGroups(positions, spotByCompany);
+  const nameByUnderlying: Record<string, string> = {};
+  for (const company of companies) {
+    const name = registry.nameByUnderlying.get(company);
+    if (name) {
+      nameByUnderlying[company] = name;
+    }
+  }
 
   return {
     reportDate: reportDateIst(),
@@ -146,6 +153,7 @@ async function buildSnapshot(
     missingSymbols: uniqueMissing,
     accountSummaries,
     groups,
+    nameByUnderlying,
   };
 }
 

@@ -61,6 +61,7 @@ export type MonitorSnapshot = {
   missingSymbols: string[];
   accountSummaries: AccountPositionSummary[];
   groups: ExpiryGroup[];
+  nameByUnderlying: Record<string, string>;
 };
 
 export type ScreenSideFilter = "CALL" | "PUT" | "BOTH";

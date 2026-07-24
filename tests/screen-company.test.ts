@@ -3,6 +3,7 @@ import type { ScreenCandidate } from "@/domain/types";
 import {
   companiesForExpiry,
   companyChoiceLabel,
+  companyMatchesQuery,
   enrichCandidatesWithMargins,
   filterCompanyChoices,
   filterQualifyingCandidates,
@@ -132,6 +133,29 @@ describe("filterCompanyChoices", () => {
       { symbol: "NIFTY", expiryIso: "2026-07-30" },
       { symbol: "NIFTY", expiryIso: "2026-08-06" },
     ]);
+  });
+});
+
+describe("companyMatchesQuery", () => {
+  const names = {
+    RELIANCE: "RELIANCE INDUSTRIES LIMITED",
+    ASIANPAINT: "ASIAN PAINTS LIMITED",
+    TCS: "TATA CONSULTANCY SERVICES LIMITED",
+  };
+
+  it("matches ticker substrings case-insensitively", () => {
+    expect(companyMatchesQuery("RELIANCE", "reli", names)).toBe(true);
+    expect(companyMatchesQuery("RELIANCE", "XYZ", names)).toBe(false);
+  });
+
+  it("matches human-readable company names", () => {
+    expect(companyMatchesQuery("ASIANPAINT", "asian paint", names)).toBe(true);
+    expect(companyMatchesQuery("TCS", "consultancy", names)).toBe(true);
+  });
+
+  it("treats an empty query as a match", () => {
+    expect(companyMatchesQuery("RELIANCE", "  ", names)).toBe(true);
+    expect(companyMatchesQuery("RELIANCE", "")).toBe(true);
   });
 });
 
