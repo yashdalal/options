@@ -43,7 +43,7 @@ const CACHE_DIR =
     ? path.join(os.tmpdir(), "near-expiry", "scrip-master")
     : path.join(process.cwd(), ".cache", "scrip-master");
 
-const SCRIP_REGISTRY_BUILD = 5;
+const SCRIP_REGISTRY_BUILD = 6;
 
 const SCRIP_SEGMENTS = ["nse_fo", "nse_cm", "bse_fo", "bse_cm"] as const;
 type ScripSegment = (typeof SCRIP_SEGMENTS)[number];
@@ -376,6 +376,14 @@ function isScreenableOption(instrument: ScripInstrument): boolean {
   );
 }
 
+function preferNseFoWhenDualListed(options: ScripInstrument[]): ScripInstrument[] {
+  const hasNse = options.some((option) => option.exchangeSegment === "nse_fo");
+  if (!hasNse) {
+    return options;
+  }
+  return options.filter((option) => option.exchangeSegment === "nse_fo");
+}
+
 function setUnderlyingName(
   nameByUnderlying: Map<string, string>,
   underlying: string,
@@ -420,6 +428,13 @@ function buildRegistry(asOfDate: string, instruments: ScripInstrument[]): ScripM
   const optionUnderlyings = [...optionsByUnderlying.keys()]
     .filter((symbol) => cashBySymbol.has(symbol))
     .sort((left, right) => left.localeCompare(right));
+
+  for (const symbol of optionUnderlyings) {
+    const options = optionsByUnderlying.get(symbol);
+    if (options) {
+      optionsByUnderlying.set(symbol, preferNseFoWhenDualListed(options));
+    }
+  }
 
   return {
     asOfDate,

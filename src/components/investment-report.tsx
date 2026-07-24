@@ -25,7 +25,6 @@ import {
   companyChoiceLabel,
   filterCompanyChoices,
   listExpiriesForSelection,
-  listUniqueExpiries,
   screenCompany,
 } from "@/lib/screen-company";
 import { runInvestmentReport } from "@/lib/investment-report-runner";
@@ -168,8 +167,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   }, [expiries, expiryIso]);
 
   const eligibility = useMemo(() => {
-    if (!meta || !selectedExpiry) {
+    if (!meta) {
       return { eligible: [] as string[], skipped: 0 };
+    }
+    if (!selectedExpiry) {
+      return { eligible: meta.underlyings, skipped: 0 };
     }
     return companiesForExpiry(
       meta.underlyings,
@@ -346,8 +348,6 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       }
       const payload = (await response.json()) as ScreenMeta;
       setMeta(payload);
-      const unique = listUniqueExpiries(payload.expiriesByUnderlying);
-      setExpiryIso((current) => current || unique[0] || "");
     } catch {
       setError("Unable to reach the local server for report meta.");
     } finally {
@@ -844,8 +844,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 setCompanyPickerOpen(false);
                 setHighlightIndex(0);
               }}
-              disabled={metaLoading || running || !expiries.length}
-              className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5"
+              disabled={metaLoading || running || expiries.length === 0}
+              className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
             >
               {expiries.map((expiry) => (
                 <option key={expiry} value={expiry}>
@@ -990,15 +990,16 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 <h3 className="text-sm font-semibold text-zinc-900">How this report works</h3>
                 <ul className="list-disc space-y-2 pl-5 text-sm text-zinc-600">
                   <li>
-                    Pick companies first or pick an expiry first. With companies selected, the
-                    expiry list only shows dates that{" "}
-                    <span className="font-medium text-zinc-800">every</span> selected name lists —
-                    so changing expiry never drops names from the selection.
+                    Pick companies first. The expiry list only shows near-term dates that{" "}
+                    <span className="font-medium text-zinc-800">every</span> selected name
+                    lists — so stock and index calendars are never mixed into one list, and
+                    changing expiry never drops names from the selection.
                   </li>
                   <li>
                     You can select up to{" "}
                     <span className="font-medium text-zinc-800">{MAX_SELECTED_COMPANIES}</span>{" "}
-                    companies. Only names that list the chosen expiry can be added for that run.
+                    companies. Only names that share a chosen expiry can be screened together
+                    in one run.
                   </li>
                   <li>
                     An option only qualifies if it meets both the minimum spread and the minimum
@@ -1077,7 +1078,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                     ? "No shared expiry across the selected companies. Remove a name or clear the list to continue."
                     : selectedCompanies.length > 0
                       ? `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"} on ${formatExpiryLabel(selectedExpiry)}.`
-                      : `Pick up to ${MAX_SELECTED_COMPANIES} companies, then run the report.`}
+                      : `Pick up to ${MAX_SELECTED_COMPANIES} companies first, then choose an expiry and run the report.`}
       </p>
 
       <div

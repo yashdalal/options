@@ -7,6 +7,7 @@ import {
   filterExpiriesToCurrentAndNextMonth,
   listExpiriesForUnderlying,
   listOptionUnderlyings,
+  listOptionsForUnderlyingExpiry,
   listUnderlyingNames,
   loadScripMasterRegistry,
   parseScripCsv,
@@ -267,6 +268,39 @@ describe("scrip csv parsing", () => {
     expect(
       listExpiriesForUnderlying(registry, "SENSEX", new Date("2026-07-23T06:30:00Z")),
     ).toEqual(["2026-07-30"]);
+  });
+
+  it("drops BSE stock FO expiries when the same name also lists on NSE", () => {
+    const registry = buildScripMasterRegistryFromInstruments("2026-07-24", [
+      ...parseScripCsv(
+        `pSymbol,pGroup,pExchSeg,pInstType,pSymbolName,pTrdSymbol,pOptionType,dStrikePrice;,lLotSize,lExpiryDate ,lMultiplier
+112308,XX,nse_fo,OPTSTK,KOTAKBANK,KOTAKBANK28JUL26305CE,CE,30500,2000,28-Jul-2026,-1
+112309,XX,nse_fo,OPTSTK,KOTAKBANK,KOTAKBANK25AUG26305CE,CE,30500,2000,25-Aug-2026,-1`,
+        "nse_fo",
+      ),
+      ...parseScripCsv(
+        `pSymbol,pGroup,pExchSeg,pInstType,pSymbolName,pTrdSymbol,pOptionType,dStrikePrice;,lLotSize,lExpiryDate ,lMultiplier
+1137392,,bse_fo,SO,KOTAKBANK,KOTAKBANK30JUL26375CE,CE,37500,2000,30-Jul-2026,1
+1137393,,bse_fo,SO,KOTAKBANK,KOTAKBANK27AUG26375CE,CE,37500,2000,27-Aug-2026,1`,
+        "bse_fo",
+      ),
+      ...parseScripCsv(
+        `pSymbol,pTrdSymbol,pSymBl,pInstrumentType
+1922,KOTAKBANK-EQ,KOTAKBANK,EQ`,
+        "nse_cm",
+      ),
+    ]);
+
+    expect(listExpiriesForUnderlying(registry, "KOTAKBANK")).toEqual([
+      "2026-07-28",
+      "2026-08-25",
+    ]);
+    expect(
+      listOptionsForUnderlyingExpiry(registry, "KOTAKBANK", "2026-07-28").every(
+        (item) => item.exchangeSegment === "nse_fo",
+      ),
+    ).toBe(true);
+    expect(listOptionsForUnderlyingExpiry(registry, "KOTAKBANK", "2026-07-30")).toEqual([]);
   });
 });
 

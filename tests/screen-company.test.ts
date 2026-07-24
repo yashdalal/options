@@ -193,19 +193,18 @@ describe("listExpiriesForSelection", () => {
   };
   const now = new Date("2026-07-23T06:30:00Z");
 
-  it("returns near-term unique expiries when nothing is selected", () => {
-    expect(listExpiriesForSelection([], byUnderlying, now)).toEqual([
-      "2026-07-28",
-      "2026-07-30",
-      "2026-08-06",
-      "2026-08-28",
-    ]);
+  it("returns no expiries when nothing is selected", () => {
+    expect(listExpiriesForSelection([], byUnderlying, now)).toEqual([]);
   });
 
   it("returns only that underlying's near-term expiries for a single selection", () => {
     expect(listExpiriesForSelection(["SENSEX"], byUnderlying, now)).toEqual([
       "2026-07-30",
       "2026-08-06",
+    ]);
+    expect(listExpiriesForSelection(["RELIANCE"], byUnderlying, now)).toEqual([
+      "2026-07-28",
+      "2026-08-28",
     ]);
   });
 

@@ -285,29 +285,28 @@ export function listUniqueExpiries(
   return [...expiries].sort();
 }
 
-/** Expiries shared by every selected symbol. Empty selection → all unique expiries. */
+/** Expiries shared by every selected symbol. Empty selection → none (pick companies first). */
 export function listExpiriesForSelection(
   selectedSymbols: string[],
   expiriesByUnderlying: Record<string, string[]>,
   now: Date = new Date(),
 ): string[] {
-  const raw =
-    selectedSymbols.length === 0
-      ? listUniqueExpiries(expiriesByUnderlying)
-      : (() => {
-          let shared: Set<string> | null = null;
-          for (const symbol of selectedSymbols) {
-            const list = expiriesByUnderlying[symbol] ?? [];
-            const next = new Set(list);
-            if (shared === null) {
-              shared = next;
-              continue;
-            }
-            shared = new Set([...shared].filter((expiry) => next.has(expiry)));
-          }
-          return shared ? [...shared].sort() : [];
-        })();
+  if (selectedSymbols.length === 0) {
+    return [];
+  }
 
+  let shared: Set<string> | null = null;
+  for (const symbol of selectedSymbols) {
+    const list = expiriesByUnderlying[symbol] ?? [];
+    const next = new Set(list);
+    if (shared === null) {
+      shared = next;
+      continue;
+    }
+    shared = new Set([...shared].filter((expiry) => next.has(expiry)));
+  }
+
+  const raw = shared ? [...shared].sort() : [];
   return filterExpiriesWithinMonthsAhead(raw, REPORT_EXPIRY_MONTHS_AHEAD, now);
 }
 
