@@ -29,8 +29,15 @@ import {
   screenCompany,
 } from "@/lib/screen-company";
 import { runInvestmentReport } from "@/lib/investment-report-runner";
+import {
+  canApplyThresholds,
+  filterRowsByThresholds,
+  thresholdsEqual,
+  type ThresholdPair,
+} from "@/lib/report-threshold-filter";
 import { NumberInput } from "@/components/number-input";
 import { PriceRangeBars, optionSideBadgeClass, optionSideTextClass } from "@/components/price-range-bars";
+import { LoadingProgressBar } from "@/components/loading-progress-bar";
 
 const REPORT_CONCURRENCY = 2;
 const MAX_SELECTED_COMPANIES = 30;
@@ -131,6 +138,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     Record<string, string>
   >({});
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const [runThresholds, setRunThresholds] = useState<ThresholdPair | null>(null);
+  const [appliedThresholds, setAppliedThresholds] = useState<ThresholdPair | null>(null);
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [companySearch, setCompanySearch] = useState("");
   const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
@@ -388,6 +397,13 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     startedAtRef.current = Date.now();
     setElapsedMs(null);
 
+    const thresholds: ThresholdPair = {
+      spreadMin: settings.spreadMin,
+      returnMin: settings.returnMin,
+    };
+    setRunThresholds(thresholds);
+    setAppliedThresholds(thresholds);
+
     setError(null);
     setRows([]);
     setPriceRangesByCompany({});
@@ -416,8 +432,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         screenCompany({
           symbol,
           expiryIso: selectedExpiry,
-          spreadMin: settings.spreadMin,
-          returnMin: settings.returnMin,
+          spreadMin: thresholds.spreadMin,
+          returnMin: thresholds.returnMin,
           side: settings.side,
           lots: settings.lots,
           accountId: settings.accountId,
@@ -492,8 +508,50 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
 
   const running = progress.status === "running";
 
+  useEffect(() => {
+    if (!runThresholds || running || progress.status === "idle") {
+      return;
+    }
+    if (!selectedExpiry || selectedCompanies.length === 0) {
+      return;
+    }
+
+    const draft: ThresholdPair = {
+      spreadMin: settings.spreadMin,
+      returnMin: settings.returnMin,
+    };
+
+    if (canApplyThresholds(runThresholds, draft)) {
+      setAppliedThresholds((current) =>
+        current && thresholdsEqual(current, draft) ? current : draft,
+      );
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void runReport();
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [
+    progress.status,
+    runReport,
+    runThresholds,
+    running,
+    selectedCompanies.length,
+    selectedExpiry,
+    settings.returnMin,
+    settings.spreadMin,
+  ]);
+
+  const displayedRows = useMemo(() => {
+    if (!appliedThresholds) {
+      return rows;
+    }
+    return filterRowsByThresholds(rows, appliedThresholds);
+  }, [appliedThresholds, rows]);
+
   const sortedRows = useMemo(() => {
-    const next = [...rows];
+    const next = [...displayedRows];
     next.sort((left, right) => {
       if (sortKey === "company") {
         const companyCmp = left.company.localeCompare(right.company);
@@ -533,7 +591,22 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       return left.optionType.localeCompare(right.optionType);
     });
     return next;
-  }, [rows, sortDir, sortKey]);
+  }, [displayedRows, sortDir, sortKey]);
+
+  const appliedSpread = appliedThresholds?.spreadMin ?? settings.spreadMin;
+  const appliedReturn = appliedThresholds?.returnMin ?? settings.returnMin;
+
+  const qualifyingSummary = useMemo(() => {
+    if (
+      runThresholds &&
+      appliedThresholds &&
+      !thresholdsEqual(runThresholds, appliedThresholds) &&
+      displayedRows.length !== rows.length
+    ) {
+      return `${displayedRows.length} of ${rows.length} options meet the applied min spread and min return`;
+    }
+    return `${displayedRows.length} options meet min spread and min return`;
+  }, [appliedThresholds, displayedRows.length, rows.length, runThresholds]);
 
   function toggleSort(nextKey: ReportSortKey) {
     if (sortKey === nextKey) {
@@ -544,9 +617,56 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     setSortDir(nextKey === "company" ? "asc" : "desc");
   }
 
+  const statusLabel =
+    progress.status === "idle"
+      ? "Ready"
+      : progress.status === "running"
+        ? `Screening ${progress.currentSymbol ?? "…"}`
+        : progress.status === "cancelled"
+          ? "Cancelled"
+          : progress.status === "error"
+            ? "Error"
+            : "Completed";
+
+  useEffect(() => {
+    if (!companyPickerOpen) {
+      return;
+    }
+    function closePicker() {
+      setCompanyPickerOpen(false);
+    }
+    window.addEventListener("scroll", closePicker, true);
+    return () => window.removeEventListener("scroll", closePicker, true);
+  }, [companyPickerOpen]);
+
+  const contextRowRef = useRef<HTMLTableCellElement | null>(null);
+  const [contextHeight, setContextHeight] = useState(56);
+
+  useEffect(() => {
+    const node = contextRowRef.current;
+    if (!node || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const update = () => {
+      setContextHeight(Math.ceil(node.getBoundingClientRect().height));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [progress.failed, progress.status, running, statusLabel]);
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
-      <header className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <LoadingProgressBar
+        active={running}
+        label={
+          progress.currentSymbol
+            ? `Screening ${progress.currentSymbol}, ${progress.processed} of ${progress.eligible}`
+            : "Screening companies"
+        }
+      />
+      <header className="relative z-40 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-zinc-900">Investment Report</h1>
@@ -587,7 +707,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-          <div className="relative sm:col-span-2" ref={companyPickerRef}>
+          <div className="relative z-50 sm:col-span-2" ref={companyPickerRef}>
             <label className="flex flex-col gap-1 text-sm text-zinc-700">
               Companies ({selectedCompanies.length}/{MAX_SELECTED_COMPANIES})
               <input
@@ -626,7 +746,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
               <div
                 id="company-picker-results"
                 role="listbox"
-                className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg"
+                className="absolute z-40 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg"
               >
                 {filteredCompanies.length === 0 &&
                 companyChoices.otherExpiryMatches.length === 0 ? (
@@ -883,7 +1003,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   <li>
                     An option only qualifies if it meets both the minimum spread and the minimum
                     annualized return after sell charges and broker margin. Every qualifying
-                    strike is shown.
+                    strike is shown. After a run, raising either min filters the current results;
+                    lowering either re-screens automatically.
                   </li>
                 </ul>
               </section>
@@ -941,94 +1062,17 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Total days to expiry
-          </span>
-          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
-            {daysToExpiry.calendar ?? "—"}
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Working days to expiry
-          </span>
-          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
-            {daysToExpiry.working ?? "—"}
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Selected
-          </span>
-          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
-            {selectedCompanies.length}
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Processed
-          </span>
-          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
-            {progress.status === "idle"
-              ? "—"
-              : `${progress.processed} / ${progress.eligible}`}
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Failed
-          </span>
-          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
-            {progress.status === "idle" ? "—" : progress.failed}
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Qualifying
-          </span>
-          <span className="text-lg font-semibold text-emerald-800 tabular-nums">
-            {progress.status === "idle" ? "—" : progress.qualifyingCount}
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Duration
-          </span>
-          <span className="text-lg font-semibold text-zinc-900 tabular-nums">
-            {elapsedMs === null ? "—" : formatDuration(elapsedMs)}
-          </span>
-        </div>
-        <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
-          <span className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            Status
-          </span>
-          <span className="text-base font-medium text-zinc-800">
-            {progress.status === "idle"
-              ? "Ready"
-              : progress.status === "running"
-                ? `Screening ${progress.currentSymbol ?? "…"}`
-                : progress.status === "cancelled"
-                  ? "Cancelled"
-                  : progress.status === "error"
-                    ? "Error"
-                    : "Completed"}
-          </span>
-        </div>
-      </div>
-
       <p className="text-sm text-zinc-600">
         {metaLoading
           ? "Loading companies…"
           : running
             ? `Scanning selected companies for ${formatExpiryLabel(selectedExpiry)}. Qualifying rows appear as each company finishes.`
             : progress.status === "completed"
-              ? `${rows.length} options meet min spread and min return across ${progress.eligible - progress.failed} companies.${elapsedMs === null ? "" : ` Report took ${formatDuration(elapsedMs)} to generate.`}`
+              ? `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.${elapsedMs === null ? "" : ` Report took ${formatDuration(elapsedMs)} to generate.`}`
               : progress.status === "cancelled"
-                ? `Stopped after ${progress.processed} companies. ${rows.length} qualifying options kept.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
+                ? `Stopped after ${progress.processed} companies. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
                 : progress.status === "error"
-                  ? `Stopped after ${progress.processed} companies due to an error. ${rows.length} qualifying options kept.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
+                  ? `Stopped after ${progress.processed} companies due to an error. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
                   : selectedCompanies.length > 0 && expiries.length === 0
                     ? "No shared expiry across the selected companies. Remove a name or clear the list to continue."
                     : selectedCompanies.length > 0
@@ -1036,9 +1080,98 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                       : `Pick up to ${MAX_SELECTED_COMPANIES} companies, then run the report.`}
       </p>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
-        <table className="min-w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-zinc-50 shadow-[inset_0_-1px_0_#d4d4d8]">
+      <div
+        className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
+        aria-busy={running}
+      >
+        <table className="min-w-full border-separate border-spacing-0 text-sm">
+          <thead>
+            <tr>
+              <th
+                ref={contextRowRef}
+                colSpan={11}
+                scope="colgroup"
+                className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-3 py-2.5 text-left font-normal"
+                aria-live="polite"
+              >
+                <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Expiry date
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900">
+                      {selectedExpiry ? formatExpiryLabel(selectedExpiry) : "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Calendar days
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {daysToExpiry.calendar ?? "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Working days
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {daysToExpiry.working ?? "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Min spread %
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {formatNumber(appliedSpread, 0)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Min return % p.a.
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {formatNumber(appliedReturn, 0)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Processed
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {progress.status === "idle"
+                        ? "—"
+                        : `${progress.processed} / ${progress.eligible}`}
+                    </span>
+                  </div>
+                  {progress.status !== "idle" && progress.failed > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                        Failed
+                      </span>
+                      <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                        {progress.failed}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Status
+                    </span>
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
+                      {running ? (
+                        <span
+                          className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800"
+                          aria-hidden
+                        />
+                      ) : null}
+                      {statusLabel}
+                    </span>
+                  </div>
+                </div>
+              </th>
+            </tr>
             <tr className="text-left text-zinc-700">
               {(
                 [
@@ -1069,13 +1202,14 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                           : "none"
                         : undefined
                     }
-                    className="border-b border-zinc-200 px-3 py-2 font-semibold whitespace-nowrap"
+                    style={{ top: contextHeight }}
+                    className="sticky z-20 border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8]"
                   >
                     {sort ? (
                       <button
                         type="button"
                         onClick={() => toggleSort(sort)}
-                        className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 -mx-1.5 transition-colors ${
+                        className={`-mx-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors ${
                           active
                             ? "bg-zinc-200 text-zinc-900 ring-1 ring-zinc-300"
                             : "text-zinc-700 underline decoration-zinc-400 decoration-dotted underline-offset-4 hover:bg-zinc-100 hover:text-zinc-900"

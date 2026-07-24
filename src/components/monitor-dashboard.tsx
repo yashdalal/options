@@ -5,6 +5,7 @@ import type { MonitorSnapshot, ReportRow, ReportSide } from "@/domain/types";
 import { shouldHighlightRow, shouldHighlightSide } from "@/domain/proximity";
 import { formatNumber, formatPercent, formatRupees } from "@/lib/format";
 import { companyMatchesQuery } from "@/lib/screen-company";
+import { LoadingProgressBar } from "@/components/loading-progress-bar";
 
 const THRESHOLD_KEY = "near_expiry_highlight_threshold";
 const SHOW_NEAR_ONLY_KEY = "near_expiry_show_near_only";
@@ -283,6 +284,7 @@ export function MonitorDashboard({
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
+      <LoadingProgressBar active={loading} label="Refreshing positions" />
       <header className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -460,9 +462,65 @@ export function MonitorDashboard({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+      <div
+        className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${loading ? "opacity-90" : ""}`}
+        aria-busy={loading}
+      >
+        <div
+          className="sticky top-0 z-20 rounded-t-2xl border-b border-zinc-200 bg-white px-4 py-2.5"
+          aria-live="polite"
+        >
+          <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Expiry date
+              </span>
+              <span className="text-sm font-semibold text-zinc-900">
+                {activeGroup?.expiryLabel ?? "—"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Within % of spot
+              </span>
+              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                {threshold}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Near positions
+              </span>
+              <span className="text-sm font-semibold text-amber-800 tabular-nums">
+                {rowSummary.nearCount}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Total positions
+              </span>
+              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                {rowSummary.total}
+              </span>
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Status
+              </span>
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
+                {loading ? (
+                  <span
+                    className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800"
+                    aria-hidden
+                  />
+                ) : null}
+                {loading ? "Refreshing…" : "Up to date"}
+              </span>
+            </div>
+          </div>
+        </div>
         <table className="min-w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-zinc-50 shadow-[inset_0_-1px_0_#d4d4d8]">
+          <thead className="bg-zinc-50 shadow-[inset_0_-1px_0_#d4d4d8]">
             <tr className="text-left text-zinc-700">
               {[
                 "",
