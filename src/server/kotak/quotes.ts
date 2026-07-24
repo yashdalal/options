@@ -207,16 +207,41 @@ export function toQuoteToken(instrumentToken: string): string {
   return INDEX_QUOTE_TOKENS[instrumentToken] ?? instrumentToken;
 }
 
+function resolveRequestedInstrument(
+  batch: InstrumentRef[],
+  quoteToken: string,
+  segment: string,
+): InstrumentRef | undefined {
+  const normalizedSegment = segment.toLowerCase();
+  const tokenKeys = [quoteToken, toQuoteToken(quoteToken)];
+  for (const token of tokenKeys) {
+    if (normalizedSegment) {
+      const exact = batch.find(
+        (item) =>
+          item.exchangeSegment.toLowerCase() === normalizedSegment &&
+          (item.instrumentToken === token || toQuoteToken(item.instrumentToken) === token),
+      );
+      if (exact) {
+        return exact;
+      }
+    }
+  }
+  for (const token of tokenKeys) {
+    const byToken = batch.find(
+      (item) =>
+        item.instrumentToken === token || toQuoteToken(item.instrumentToken) === token,
+    );
+    if (byToken) {
+      return byToken;
+    }
+  }
+  return undefined;
+}
+
 async function fetchQuoteBatch(
   session: TradeSessionCredentials,
   batch: InstrumentRef[],
 ): Promise<InstrumentQuote[]> {
-  const requestedByQuoteKey = new Map(
-    batch.map((item) => [
-      `${item.exchangeSegment}:${toQuoteToken(item.instrumentToken)}`,
-      item,
-    ]),
-  );
   const neoSymbols = batch
     .map((item) => `${item.exchangeSegment}|${toQuoteToken(item.instrumentToken)}`)
     .join(",");
@@ -235,22 +260,35 @@ async function fetchQuoteBatch(
   );
 
   const results: InstrumentQuote[] = [];
+  const matchedKeys = new Set<string>();
   const items = extractItems(payload);
+  if (items.length === 0) {
+    return [];
+  }
   for (const item of items) {
     const quoteToken = String(
       item.instrument_token ?? item.exchange_token ?? item.pSymbol ?? "",
     );
-    const segment = String(item.exchange_segment ?? item.exchange ?? "nse_cm");
-    const requested = requestedByQuoteKey.get(`${segment}:${quoteToken}`);
+    const segment = String(item.exchange_segment ?? item.exchange ?? "").toLowerCase();
+    const requested = resolveRequestedInstrument(batch, quoteToken, segment);
+    if (requested) {
+      matchedKeys.add(`${requested.exchangeSegment}:${requested.instrumentToken}`);
+    }
     results.push({
       instrumentToken: requested?.instrumentToken ?? quoteToken,
-      exchangeSegment: segment,
+      exchangeSegment: requested?.exchangeSegment ?? (segment || "nse_cm"),
       tradingSymbol: item.trading_symbol ?? item.display_symbol,
       ltp: resolveLtp(item),
       bestBid: resolveBestBid(item),
       bestAsk: resolveBestAsk(item),
       buyDepth: parseBuyDepth(item.depth?.buy),
     });
+  }
+  for (const item of batch) {
+    const key = `${item.exchangeSegment}:${item.instrumentToken}`;
+    if (!matchedKeys.has(key)) {
+      results.push(emptyQuote(item));
+    }
   }
   return results;
 }
