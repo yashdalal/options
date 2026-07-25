@@ -45,6 +45,7 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and connect each account wit
 | `npm run test:e2e` | Playwright smoke test |
 | `npm run probe:kotak` | Live Kotak contract probe |
 | `npm run probe:session-store` | Live Upstash Redis session roundtrip |
+| `npm run probe:span` | Download/cache NSE SPAN zip and sample straddle margin |
 
 ### Live probe
 

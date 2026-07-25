@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "probe:kotak": "tsx scripts/probe-kotak.ts",
-    "probe:session-store": "tsx scripts/probe-session-store.ts"
+    "probe:session-store": "tsx scripts/probe-session-store.ts",
+    "probe:span": "tsx scripts/probe-span-margin.ts"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.0",
