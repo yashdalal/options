@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MonitorSnapshot, ReportRow, ReportSide } from "@/domain/types";
 import { shouldHighlightRow, shouldHighlightSide } from "@/domain/proximity";
 import { formatNumber, formatPercent, formatRupees } from "@/lib/format";
@@ -10,6 +10,7 @@ import { LoadingProgressBar } from "@/components/loading-progress-bar";
 const THRESHOLD_KEY = "near_expiry_highlight_threshold";
 const SHOW_NEAR_ONLY_KEY = "near_expiry_show_near_only";
 const EMPTY_NAME_BY_UNDERLYING: Record<string, string> = {};
+const MONITOR_COLUMN_COUNT = 11;
 
 type MonitorDashboardProps = {
   active?: boolean;
@@ -282,6 +283,23 @@ export function MonitorDashboard({
     });
   }
 
+  const contextRowRef = useRef<HTMLTableCellElement | null>(null);
+  const [contextHeight, setContextHeight] = useState(56);
+
+  useEffect(() => {
+    const node = contextRowRef.current;
+    if (!node || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const update = () => {
+      setContextHeight(Math.ceil(node.getBoundingClientRect().height));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loading, rowSummary.nearCount, rowSummary.total, activeGroup?.expiryLabel, threshold]);
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
       <LoadingProgressBar active={loading} label="Refreshing positions" />
@@ -466,61 +484,66 @@ export function MonitorDashboard({
         className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${loading ? "opacity-90" : ""}`}
         aria-busy={loading}
       >
-        <div
-          className="sticky top-0 z-20 rounded-t-2xl border-b border-zinc-200 bg-white px-4 py-2.5"
-          aria-live="polite"
-        >
-          <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Expiry date
-              </span>
-              <span className="text-sm font-semibold text-zinc-900">
-                {activeGroup?.expiryLabel ?? "—"}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Within % of spot
-              </span>
-              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                {threshold}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Near positions
-              </span>
-              <span className="text-sm font-semibold text-amber-800 tabular-nums">
-                {rowSummary.nearCount}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Total positions
-              </span>
-              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                {rowSummary.total}
-              </span>
-            </div>
-            <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Status
-              </span>
-              <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
-                {loading ? (
-                  <span
-                    className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800"
-                    aria-hidden
-                  />
-                ) : null}
-                {loading ? "Refreshing…" : "Up to date"}
-              </span>
-            </div>
-          </div>
-        </div>
-        <table className="min-w-full border-collapse text-sm">
-          <thead className="bg-zinc-50 shadow-[inset_0_-1px_0_#d4d4d8]">
+        <table className="min-w-full border-separate border-spacing-0 text-sm">
+          <thead>
+            <tr>
+              <th
+                ref={contextRowRef}
+                colSpan={MONITOR_COLUMN_COUNT}
+                scope="colgroup"
+                className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-3 py-2.5 text-left font-normal"
+                aria-live="polite"
+              >
+                <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Expiry date
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900">
+                      {activeGroup?.expiryLabel ?? "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Within % of spot
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {threshold}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Near positions
+                    </span>
+                    <span className="text-sm font-semibold text-amber-800 tabular-nums">
+                      {rowSummary.nearCount}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Total positions
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {rowSummary.total}
+                    </span>
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Status
+                    </span>
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
+                      {loading ? (
+                        <span
+                          className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800"
+                          aria-hidden
+                        />
+                      ) : null}
+                      {loading ? "Refreshing…" : "Up to date"}
+                    </span>
+                  </div>
+                </div>
+              </th>
+            </tr>
             <tr className="text-left text-zinc-700">
               {[
                 "",
@@ -537,7 +560,8 @@ export function MonitorDashboard({
               ].map((heading) => (
                 <th
                   key={heading || "expand"}
-                  className="border-b border-zinc-200 px-3 py-2 font-semibold whitespace-nowrap"
+                  style={{ top: contextHeight }}
+                  className="sticky z-20 border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8]"
                 >
                   {heading}
                 </th>
@@ -547,7 +571,10 @@ export function MonitorDashboard({
           <tbody>
             {rowSummary.visibleEntries.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-3 py-8 text-center text-zinc-500">
+                <td
+                  colSpan={MONITOR_COLUMN_COUNT}
+                  className="px-3 py-8 text-center text-zinc-500"
+                >
                   {emptyRowsMessage(
                     rowSummary.total,
                     showNearOnly,
