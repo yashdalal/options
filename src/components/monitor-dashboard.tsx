@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MonitorSnapshot, ReportRow, ReportSide } from "@/domain/types";
 import { shouldHighlightRow, shouldHighlightSide } from "@/domain/proximity";
 import { formatNumber, formatPercent, formatRupees } from "@/lib/format";
@@ -11,6 +11,20 @@ const THRESHOLD_KEY = "near_expiry_highlight_threshold";
 const SHOW_NEAR_ONLY_KEY = "near_expiry_show_near_only";
 const EMPTY_NAME_BY_UNDERLYING: Record<string, string> = {};
 const MONITOR_COLUMN_COUNT = 11;
+
+const TABLE_HEADINGS: { label: string; groupStart?: boolean }[] = [
+  { label: "" },
+  { label: "Company" },
+  { label: "Spot" },
+  { label: "Call strike", groupStart: true },
+  { label: "Lots" },
+  { label: "% Near" },
+  { label: "₹ Near" },
+  { label: "Put strike", groupStart: true },
+  { label: "Lots" },
+  { label: "% Near" },
+  { label: "₹ Near" },
+];
 
 type MonitorDashboardProps = {
   active?: boolean;
@@ -129,7 +143,7 @@ function SideCells({
 }) {
   return (
     <>
-      <td className={optionCellClass(highlighted)}>
+      <td className={`${optionCellClass(highlighted)} border-l border-zinc-200`}>
         {side ? formatRupees(side.strike, 2) : "—"}
       </td>
       <td className={optionCellClass(highlighted)}>
@@ -283,23 +297,6 @@ export function MonitorDashboard({
     });
   }
 
-  const contextRowRef = useRef<HTMLTableCellElement | null>(null);
-  const [contextHeight, setContextHeight] = useState(56);
-
-  useEffect(() => {
-    const node = contextRowRef.current;
-    if (!node || typeof ResizeObserver === "undefined") {
-      return;
-    }
-    const update = () => {
-      setContextHeight(Math.ceil(node.getBoundingClientRect().height));
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [loading, rowSummary.nearCount, rowSummary.total, activeGroup?.expiryLabel, threshold]);
-
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
       <LoadingProgressBar active={loading} label="Refreshing positions" />
@@ -377,12 +374,12 @@ export function MonitorDashboard({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-zinc-500">
         <span>Report {snapshot?.reportDate ?? "—"}</span>
-        <span>
-          Positions: {snapshot?.optionPositionCount ?? 0} · Prices:{" "}
-          {snapshot?.downloadedPriceCount ?? 0}
+        <span className="text-zinc-300" aria-hidden>
+          ·
         </span>
+        <span>Prices {snapshot?.downloadedPriceCount ?? 0}</span>
         {snapshot?.accountSummaries.map((summary) => (
           <span
             key={summary.accountId}
@@ -391,179 +388,103 @@ export function MonitorDashboard({
             {summary.accountLabel}: {summary.optionPositionCount}
           </span>
         ))}
-        <span>
-          Updated:{" "}
+        <span className="sm:ml-auto">
+          Updated{" "}
           {snapshot
             ? new Date(snapshot.generatedAt).toLocaleString("en-IN", {
                 timeZone: "Asia/Kolkata",
               })
             : "—"}
+          {autoRefresh && active && pageVisible && nextRefreshAt
+            ? ` · Next ${new Date(nextRefreshAt).toLocaleTimeString("en-IN")}`
+            : ""}
         </span>
-        {autoRefresh && active && pageVisible && nextRefreshAt ? (
-          <span>Next refresh around {new Date(nextRefreshAt).toLocaleTimeString("en-IN")}</span>
-        ) : null}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <div className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-          Expiry
+      <div className="flex flex-wrap items-center gap-3">
+        <div
+          className="flex min-w-0 gap-2 overflow-x-auto"
+          role="tablist"
+          aria-label="Expiry date"
+        >
+          {snapshot?.groups.map((group) => {
+            const selected = activeGroup?.expiryIso === group.expiryIso;
+            return (
+              <button
+                key={group.expiryIso}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setSelectedExpiry(group.expiryIso)}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ${
+                  selected
+                    ? "bg-zinc-900 text-white"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
+              >
+                {group.expiryLabel}
+              </button>
+            );
+          })}
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div
-            className="flex min-w-0 gap-2 overflow-x-auto"
-            role="tablist"
-            aria-label="Expiry date"
+        <div className="inline-flex items-center gap-3 rounded-full border border-zinc-200 bg-white py-1 pr-1 pl-3.5 shadow-sm">
+          <p className="text-sm whitespace-nowrap">
+            <span className="text-base font-semibold text-amber-800 tabular-nums">
+              {rowSummary.nearCount}
+            </span>
+            <span className="text-zinc-500"> near</span>
+            <span className="mx-1.5 text-zinc-300" aria-hidden>
+              ·
+            </span>
+            <span className="font-medium text-zinc-800 tabular-nums">
+              {rowSummary.total}
+            </span>
+            <span className="text-zinc-500"> total</span>
+          </p>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showNearOnly}
+            aria-label="Show only positions within the near threshold"
+            onClick={() => setShowNearOnly((current) => !current)}
+            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              showNearOnly
+                ? "bg-amber-600 text-white shadow-sm"
+                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+            }`}
           >
-            {snapshot?.groups.map((group) => {
-              const selected = activeGroup?.expiryIso === group.expiryIso;
-              return (
-                <button
-                  key={group.expiryIso}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  onClick={() => setSelectedExpiry(group.expiryIso)}
-                  className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ${
-                    selected
-                      ? "bg-zinc-900 text-white"
-                      : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                  }`}
-                >
-                  {group.expiryLabel}
-                </button>
-              );
-            })}
-          </div>
-          <div className="inline-flex items-center gap-3 rounded-full border border-zinc-200 bg-white py-1 pr-1 pl-3.5 shadow-sm">
-            <p className="text-sm whitespace-nowrap">
-              <span className="text-base font-semibold text-amber-800 tabular-nums">
-                {rowSummary.nearCount}
-              </span>
-              <span className="text-zinc-500"> near</span>
-              <span className="mx-1.5 text-zinc-300" aria-hidden>
-                ·
-              </span>
-              <span className="tabular-nums text-zinc-500">{rowSummary.total}</span>
-              <span className="text-zinc-500"> total</span>
-              <span className="mx-1.5 text-zinc-300" aria-hidden>
-                ·
-              </span>
-              <span className="tabular-nums text-zinc-500">≤{threshold}%</span>
-            </p>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={showNearOnly}
-              aria-label="Show only positions within the near threshold"
-              onClick={() => setShowNearOnly((current) => !current)}
-              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-                showNearOnly
-                  ? "bg-amber-600 text-white shadow-sm"
-                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-              }`}
-            >
-              Near only
-            </button>
-          </div>
-          <label className="sr-only" htmlFor="near-expiry-company-search">
-            Search by company or ticker
-          </label>
-          <input
-            id="near-expiry-company-search"
-            type="search"
-            value={companyQuery}
-            onChange={(event) => setCompanyQuery(event.target.value)}
-            placeholder="Search company or ticker…"
-            aria-label="Search by company or ticker"
-            className="min-w-[12rem] flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-200 sm:max-w-xs"
-          />
+            Near only
+          </button>
         </div>
+        <label className="sr-only" htmlFor="near-expiry-company-search">
+          Search by company or ticker
+        </label>
+        <input
+          id="near-expiry-company-search"
+          type="search"
+          value={companyQuery}
+          onChange={(event) => setCompanyQuery(event.target.value)}
+          placeholder="Search company or ticker…"
+          aria-label="Search by company or ticker"
+          className="min-w-[12rem] flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-200 sm:max-w-xs"
+        />
       </div>
 
       <div
-        className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${loading ? "opacity-90" : ""}`}
+        className={`overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm ${loading ? "opacity-90" : ""}`}
         aria-busy={loading}
       >
         <table className="min-w-full border-separate border-spacing-0 text-sm">
           <thead>
-            <tr>
-              <th
-                ref={contextRowRef}
-                colSpan={MONITOR_COLUMN_COUNT}
-                scope="colgroup"
-                className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-3 py-2.5 text-left font-normal"
-                aria-live="polite"
-              >
-                <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Expiry date
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900">
-                      {activeGroup?.expiryLabel ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Within % of spot
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                      {threshold}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Near positions
-                    </span>
-                    <span className="text-sm font-semibold text-amber-800 tabular-nums">
-                      {rowSummary.nearCount}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Total positions
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                      {rowSummary.total}
-                    </span>
-                  </div>
-                  <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Status
-                    </span>
-                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
-                      {loading ? (
-                        <span
-                          className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800"
-                          aria-hidden
-                        />
-                      ) : null}
-                      {loading ? "Refreshing…" : "Up to date"}
-                    </span>
-                  </div>
-                </div>
-              </th>
-            </tr>
             <tr className="text-left text-zinc-700">
-              {[
-                "",
-                "Company",
-                "Spot",
-                "Call Strike",
-                "Call Lots (Shares)",
-                "Call % Near",
-                "Call ₹ Near",
-                "Put Strike",
-                "Put Lots (Shares)",
-                "Put % Near",
-                "Put ₹ Near",
-              ].map((heading) => (
+              {TABLE_HEADINGS.map((heading, index) => (
                 <th
-                  key={heading || "expand"}
-                  style={{ top: contextHeight }}
-                  className="sticky z-20 border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8]"
+                  key={`${heading.label || "expand"}-${index}`}
+                  className={`sticky top-0 z-20 border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8]${
+                    heading.groupStart ? " border-l border-zinc-200" : ""
+                  }`}
                 >
-                  {heading}
+                  {heading.label}
                 </th>
               ))}
             </tr>
@@ -658,8 +579,8 @@ export function MonitorDashboard({
                           {detail.accountLabel}
                         </span>
                       </td>
-                      <td className="border-b border-zinc-100 px-3 py-2 text-zinc-400">
-                        {formatRupees(row.spot)}
+                      <td className="border-b border-zinc-100 px-3 py-2 text-zinc-300">
+                        —
                       </td>
                       <SideCells side={detail.call} highlighted={detailCallHighlighted} />
                       <SideCells side={detail.put} highlighted={detailPutHighlighted} />
