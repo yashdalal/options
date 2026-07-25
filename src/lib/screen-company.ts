@@ -33,6 +33,8 @@ export function enrichCandidatesWithMargins(
     id?: string;
     instrumentToken: string;
     margin: number | null;
+    spanMargin?: number | null;
+    spanMarginError?: string;
     error?: string;
   }[],
   returnMin: number,
@@ -60,6 +62,8 @@ export function enrichCandidatesWithMargins(
     return {
       ...candidate,
       margin: result.margin,
+      spanMargin: result.spanMargin ?? null,
+      spanMarginError: result.spanMarginError ?? null,
       annualizedReturnPct,
       meetsReturn:
         annualizedReturnPct === null ? null : annualizedReturnPct >= returnMin,
@@ -343,6 +347,12 @@ async function loadMarginsForCandidates(
           tradingSymbol: row.tradingSymbol,
           premium: row.premium,
           quantity: row.lotSize * row.lots,
+          underlying: row.company,
+          expiryIso: row.expiryIso,
+          strike: row.strike,
+          optionType: row.optionType,
+          lots: row.lots,
+          lotSize: row.lotSize,
         })),
       }),
       signal,
@@ -360,6 +370,8 @@ async function loadMarginsForCandidates(
         id?: string;
         instrumentToken: string;
         margin: number | null;
+        spanMargin?: number | null;
+        spanMarginError?: string;
         error?: string;
       }[];
     };

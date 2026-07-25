@@ -274,6 +274,8 @@ export function buildScreenCandidate(input: {
     exchangeSegment: input.option.exchangeSegment,
     tradingSymbol: input.option.tradingSymbol,
     margin,
+    spanMargin: null,
+    spanMarginError: null,
     annualizedReturnPct,
     meetsSpread,
     meetsReturn,

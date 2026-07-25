@@ -20,7 +20,7 @@ Read-only against the broker: the app fetches positions, quotes, scrip master, a
 - Pick F&O companies and an expiry, then filter short CE/PE by minimum OTM spread and minimum annualized return
 - Walks the bid depth to allocate the requested lots, so multi-lot fills price realistically instead of assuming best bid for everything
 - Deducts Kotak sell charges before computing return
-- Per-row Kotak `check-margin` for annualized return on margin blocked
+- Per-row Kotak `check-margin` for annualized return on margin blocked, with a muted single-leg SPAN + ELM estimate underneath (same math as the basket tray) so you can see how far off the local model is
 - 1M / 3M / 1Y price range bars from Yahoo Finance
 - Warns when the company has an upcoming board meeting (scraped from the NSE corporate event calendar)
 - Reports screening coverage: how many strikes were in band, quoted, skipped for no bid, or below the spread floor
@@ -111,7 +111,7 @@ All routes are same-origin. Everything except `/api/auth/login` and `/api/auth/s
 | `/api/monitor` | GET | Near-expiry snapshot across all three accounts |
 | `/api/screen` | GET | Screener snapshot for one company + expiry |
 | `/api/screen/meta` | GET | F&O underlyings, expiries, and company names from the scrip master |
-| `/api/screen/margin` | POST | Kotak `check-margin` for up to 40 legs |
+| `/api/screen/margin` | POST | Kotak `check-margin` plus single-leg SPAN + ELM for up to 40 legs |
 | `/api/margin/basket` | POST | SPAN + ELM for up to 20 basket legs, optional incremental ΔM |
 | `/api/margin/span-refresh` | POST | Force re-download and re-parse of the NSE SPAN file |
 

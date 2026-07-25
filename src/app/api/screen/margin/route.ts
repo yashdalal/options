@@ -8,6 +8,8 @@ import { logError, safeErrorMessage } from "@/server/logging";
 import { getScreenMargins } from "@/server/screen";
 import { requireConnectedAccounts } from "@/server/session";
 
+export const maxDuration = 120;
+
 const bodySchema = z.object({
   accountId: z.string().optional(),
   items: z
@@ -19,6 +21,12 @@ const bodySchema = z.object({
         tradingSymbol: z.string().optional(),
         premium: z.number().positive(),
         quantity: z.number().int().positive(),
+        underlying: z.string().min(1),
+        expiryIso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        strike: z.number().positive(),
+        optionType: z.enum(["CALL", "PUT"]),
+        lots: z.number().positive(),
+        lotSize: z.number().int().positive(),
       }),
     )
     .max(40),

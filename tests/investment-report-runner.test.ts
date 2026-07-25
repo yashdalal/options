@@ -30,6 +30,8 @@ function candidate(
     exchangeSegment: "nse_fo",
     tradingSymbol: `${partial.company}28AUG263000CE`,
     margin: 10000,
+    spanMargin: 9500,
+    spanMarginError: null,
     annualizedReturnPct: 40,
     meetsSpread: true,
     meetsReturn: true,

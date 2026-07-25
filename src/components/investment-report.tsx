@@ -1092,7 +1092,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   </li>
                   <li>
                     An option only qualifies if it meets both the minimum spread and the minimum
-                    annualized return after sell charges and broker margin. Every qualifying
+                    annualized return after sell charges and Kotak margin. Every qualifying
                     strike is shown. After a run, click Run screener again to apply new mins —
                     raising either filters the current results; lowering either re-screens.
                   </li>
@@ -1136,7 +1136,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   <div className="flex flex-col gap-1">
                     <dt className="font-medium text-zinc-800">Bid / Margin</dt>
                     <dd className="text-xs text-zinc-600">
-                      Bid from order-book buy depth; margin from broker check-margin API
+                      Bid from order-book buy depth; primary margin from broker check-margin
+                      API (used for ann. return). Muted line under it is single-leg SPAN + ELM
+                      (same math as baskets) with Δ% vs Kotak
                     </dd>
                   </div>
                 </dl>
@@ -1458,7 +1460,31 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                     {formatRupees(row.netPremium, 0)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
-                    {formatRupees(row.margin, 0)}
+                    <div className="flex flex-col gap-0.5">
+                      <span>{formatRupees(row.margin, 0)}</span>
+                      {row.spanMargin !== null ? (
+                        <span
+                          className="text-[11px] font-normal text-zinc-400"
+                          title={
+                            row.margin !== null && row.margin > 0
+                              ? `SPAN ${formatRupees(row.spanMargin, 0)} (${(((row.spanMargin - row.margin) / row.margin) * 100).toFixed(1)}% vs Kotak)`
+                              : `SPAN ${formatRupees(row.spanMargin, 0)}`
+                          }
+                        >
+                          {formatRupees(row.spanMargin, 0)}
+                          {row.margin !== null && row.margin > 0
+                            ? ` (${(((row.spanMargin - row.margin) / row.margin) * 100).toFixed(1)}%)`
+                            : ""}
+                        </span>
+                      ) : row.spanMarginError ? (
+                        <span
+                          className="text-[11px] font-normal text-zinc-400"
+                          title={row.spanMarginError}
+                        >
+                          SPAN unavailable
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
                 {expanded ? (
