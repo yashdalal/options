@@ -382,7 +382,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       const payload = (await response.json()) as ScreenMeta;
       setMeta(payload);
     } catch {
-      setError("Unable to reach the local server for report meta.");
+      setError("Unable to reach the local server for screener meta.");
     } finally {
       setMetaLoading(false);
     }
@@ -540,7 +540,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     if (result.reason === "auth") {
       onLoginRequired();
     } else if (result.reason === "unexpected") {
-      setError("Report stopped due to an unexpected error.");
+      setError("Screener stopped due to an unexpected error.");
     }
 
     if (abortRef.current === controller) {
@@ -747,7 +747,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       <header className="relative z-40 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold text-zinc-900">Investment Report</h1>
+            <h1 className="text-xl font-semibold text-zinc-900">Options Screener</h1>
             <p className="text-sm text-zinc-600">
               Screen a short company list and list every option that meets min spread and min
               annualized return.{" "}
@@ -789,7 +789,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 }
                 className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
               >
-                Run report
+                Run screener
               </button>
             )}
           </div>
@@ -1059,12 +1059,12 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
           <aside
             role="dialog"
             aria-modal="true"
-            aria-labelledby="report-help-title"
+            aria-labelledby="screener-help-title"
             className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white shadow-xl"
           >
             <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
-              <h2 id="report-help-title" className="text-base font-semibold text-zinc-900">
-                Report help
+              <h2 id="screener-help-title" className="text-base font-semibold text-zinc-900">
+                Screener help
               </h2>
               <button
                 type="button"
@@ -1076,7 +1076,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
             </div>
             <div className="flex-1 space-y-8 overflow-y-auto px-4 py-4">
               <section className="space-y-3">
-                <h3 className="text-sm font-semibold text-zinc-900">How this report works</h3>
+                <h3 className="text-sm font-semibold text-zinc-900">How this screener works</h3>
                 <ul className="list-disc space-y-2 pl-5 text-sm text-zinc-600">
                   <li>
                     Pick companies first. The expiry list only shows near-term dates that{" "}
@@ -1093,7 +1093,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   <li>
                     An option only qualifies if it meets both the minimum spread and the minimum
                     annualized return after sell charges and broker margin. Every qualifying
-                    strike is shown. After a run, click Run report again to apply new mins —
+                    strike is shown. After a run, click Run screener again to apply new mins —
                     raising either filters the current results; lowering either re-screens.
                   </li>
                 </ul>
@@ -1162,7 +1162,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   displayedRows.length === 0
                     ? qualifyingSummary
                     : `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.`
-                }${elapsedMs === null ? "" : ` Report took ${formatDuration(elapsedMs)} to generate.`}`
+                }${elapsedMs === null ? "" : ` Screener took ${formatDuration(elapsedMs)}.`}`
               : progress.status === "cancelled"
                 ? `Stopped after ${progress.processed} companies. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
                 : progress.status === "error"
@@ -1171,7 +1171,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                     ? "No shared expiry across the selected companies. Remove a name or clear the list to continue."
                     : selectedCompanies.length > 0
                       ? `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"} on ${formatExpiryLabel(selectedExpiry)}.`
-                      : `Pick up to ${MAX_SELECTED_COMPANIES} companies first, then choose an expiry and run the report.`}
+                      : `Pick up to ${MAX_SELECTED_COMPANIES} companies first, then choose an expiry and run the screener.`}
       </p>
 
       <div
@@ -1351,7 +1351,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                       ? "Screening companies…"
                       : progress.status === "completed" || progress.status === "cancelled"
                         ? emptyReportReason
-                        : "Pick companies and run a report."}
+                        : "Pick companies and run the screener."}
                 </td>
               </tr>
             ) : (

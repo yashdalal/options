@@ -55,4 +55,4 @@ Omit `accountId` for empty-book basket margin only.
 
 ## UI
 
-Investment Report tab: **+ Basket** on candidate rows, sticky basket tray with account picker, ΔM, and return-on-ΔM when all legs share one expiry.
+Options Screener tab: **+ Basket** on candidate rows, sticky basket tray with account picker, ΔM, and return-on-ΔM when all legs share one expiry.

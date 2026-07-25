@@ -17,7 +17,7 @@ type AuthStatus = {
   accounts?: AccountAuthStatus[];
 };
 
-type AppTab = "monitor" | "report";
+type AppTab = "monitor" | "screener";
 
 const EMPTY_ACCOUNTS: AccountAuthStatus[] = ACCOUNT_DEFINITIONS.map((definition) => ({
   accountId: definition.id,
@@ -106,7 +106,7 @@ export function AppShell() {
 
   const navItems: { id: AppTab; label: string }[] = [
     { id: "monitor", label: "Near Expiry" },
-    { id: "report", label: "Investment Report" },
+    { id: "screener", label: "Options Screener" },
   ];
 
   return (
@@ -165,7 +165,7 @@ export function AppShell() {
         />
       </div>
       <div
-        className={`flex min-h-0 flex-1 flex-col ${tab === "report" ? undefined : "hidden"}`}
+        className={`flex min-h-0 flex-1 flex-col ${tab === "screener" ? undefined : "hidden"}`}
       >
         <InvestmentReport onLoginRequired={() => void loadStatus()} />
       </div>
