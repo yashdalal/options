@@ -52,7 +52,7 @@ import { PriceRangeBars, optionSideBadgeClass, optionSideTextClass } from "@/com
 import { LoadingProgressBar } from "@/components/loading-progress-bar";
 
 const REPORT_CONCURRENCY = 2;
-const REPORT_COLUMN_COUNT = 11;
+const REPORT_COLUMN_COUNT = 10;
 const MAX_SELECTED_COMPANIES = 30;
 const EMPTY_NAME_BY_UNDERLYING: Record<string, string> = {};
 
@@ -1134,17 +1134,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                     </dd>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <dt className="font-medium text-zinc-800">Bid / Kotak margin</dt>
+                    <dt className="font-medium text-zinc-800">Bid / Margin</dt>
                     <dd className="text-xs text-zinc-600">
-                      Bid from order-book buy depth; Kotak margin from broker check-margin
-                      API (used for ann. return)
-                    </dd>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <dt className="font-medium text-zinc-800">SPAN margin</dt>
-                    <dd className="text-xs text-zinc-600">
-                      Same single-leg NSE SPAN + ELM math as the basket tray, for comparison
-                      against Kotak. Δ% = (SPAN − Kotak) / Kotak
+                      Bid from order-book buy depth; primary margin from broker check-margin
+                      API (used for ann. return). Muted line under it is single-leg SPAN + ELM
+                      (same math as baskets) with Δ% vs Kotak
                     </dd>
                   </div>
                 </dl>
@@ -1286,8 +1280,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   { heading: "Ann. return %", sort: "return" as const },
                   { heading: "Bid" },
                   { heading: "Net premium" },
-                  { heading: "Kotak margin" },
-                  { heading: "SPAN margin" },
+                  { heading: "Margin" },
                 ] satisfies { heading: string; sort?: ReportSortKey }[]
               ).map(({ heading, sort }) => {
                 const active = Boolean(sort && sortKey === sort);
@@ -1467,29 +1460,31 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                     {formatRupees(row.netPremium, 0)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
-                    {formatRupees(row.margin, 0)}
-                  </td>
-                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
-                    {row.spanMargin !== null ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span>{formatRupees(row.spanMargin, 0)}</span>
-                        {row.margin !== null && row.margin > 0 ? (
-                          <span className="text-[11px] font-normal text-zinc-500">
-                            {(((row.spanMargin - row.margin) / row.margin) * 100).toFixed(1)}%
-                            vs Kotak
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : row.spanMarginError ? (
-                      <span
-                        className="text-xs font-normal text-amber-800"
-                        title={row.spanMarginError}
-                      >
-                        Unavailable
-                      </span>
-                    ) : (
-                      formatRupees(null, 0)
-                    )}
+                    <div className="flex flex-col gap-0.5">
+                      <span>{formatRupees(row.margin, 0)}</span>
+                      {row.spanMargin !== null ? (
+                        <span
+                          className="text-[11px] font-normal text-zinc-400"
+                          title={
+                            row.margin !== null && row.margin > 0
+                              ? `SPAN ${formatRupees(row.spanMargin, 0)} (${(((row.spanMargin - row.margin) / row.margin) * 100).toFixed(1)}% vs Kotak)`
+                              : `SPAN ${formatRupees(row.spanMargin, 0)}`
+                          }
+                        >
+                          {formatRupees(row.spanMargin, 0)}
+                          {row.margin !== null && row.margin > 0
+                            ? ` (${(((row.spanMargin - row.margin) / row.margin) * 100).toFixed(1)}%)`
+                            : ""}
+                        </span>
+                      ) : row.spanMarginError ? (
+                        <span
+                          className="text-[11px] font-normal text-zinc-400"
+                          title={row.spanMarginError}
+                        >
+                          SPAN unavailable
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
                 {expanded ? (
