@@ -14,6 +14,7 @@ import type {
   BoardMeetingInfo,
   InvestmentReportProgress,
   InvestmentReportRow,
+  ScreenCoverage,
   ScreenMeta,
   ScreenSideFilter,
   UnderlyingPriceRanges,
@@ -27,7 +28,11 @@ import {
   listExpiriesForSelection,
   screenCompany,
 } from "@/lib/screen-company";
-import { runInvestmentReport } from "@/lib/investment-report-runner";
+import {
+  aggregateScreenCoverage,
+  describeEmptyReportReason,
+  runInvestmentReport,
+} from "@/lib/investment-report-runner";
 import {
   filterRowsByThresholds,
   shouldFilterThresholdsOnly,
@@ -148,6 +153,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   >({});
   const [boardMeetingErrorByCompany, setBoardMeetingErrorByCompany] = useState<
     Record<string, string>
+  >({});
+  const [coverageByCompany, setCoverageByCompany] = useState<
+    Record<string, ScreenCoverage>
   >({});
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [runBasis, setRunBasis] = useState<ReportRunBasis | null>(null);
@@ -430,6 +438,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     setPriceRangesErrorByCompany({});
     setBoardMeetingByCompany({});
     setBoardMeetingErrorByCompany({});
+    setCoverageByCompany({});
     setProgress({
       status: "running",
       expiryIso: selectedExpiry,
@@ -497,6 +506,12 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
           setBoardMeetingErrorByCompany((current) => ({
             ...current,
             [companyMeta.symbol]: companyMeta.boardMeetingError!,
+          }));
+        }
+        if (companyMeta.coverage) {
+          setCoverageByCompany((current) => ({
+            ...current,
+            [companyMeta.symbol]: companyMeta.coverage!,
           }));
         }
       },
@@ -619,7 +634,20 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   const appliedSpread = appliedThresholds?.spreadMin ?? settings.spreadMin;
   const appliedReturn = appliedThresholds?.returnMin ?? settings.returnMin;
 
+  const aggregatedCoverage = useMemo(
+    () => aggregateScreenCoverage(Object.values(coverageByCompany)),
+    [coverageByCompany],
+  );
+
+  const emptyReportReason = useMemo(
+    () => describeEmptyReportReason(aggregatedCoverage),
+    [aggregatedCoverage],
+  );
+
   const qualifyingSummary = useMemo(() => {
+    if (displayedRows.length === 0) {
+      return emptyReportReason;
+    }
     if (
       runBasis &&
       appliedThresholds &&
@@ -629,7 +657,13 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       return `${displayedRows.length} of ${rows.length} options meet the applied min spread and min return`;
     }
     return `${displayedRows.length} options meet min spread and min return`;
-  }, [appliedThresholds, displayedRows.length, rows.length, runBasis]);
+  }, [
+    appliedThresholds,
+    displayedRows.length,
+    emptyReportReason,
+    rows.length,
+    runBasis,
+  ]);
 
   function toggleSort(nextKey: ReportSortKey) {
     if (sortKey === nextKey) {
@@ -1092,7 +1126,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
           : running
             ? `Scanning selected companies for ${formatExpiryLabel(selectedExpiry)}. Qualifying rows appear as each company finishes.`
             : progress.status === "completed"
-              ? `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.${elapsedMs === null ? "" : ` Report took ${formatDuration(elapsedMs)} to generate.`}`
+              ? `${
+                  displayedRows.length === 0
+                    ? qualifyingSummary
+                    : `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.`
+                }${elapsedMs === null ? "" : ` Report took ${formatDuration(elapsedMs)} to generate.`}`
               : progress.status === "cancelled"
                 ? `Stopped after ${progress.processed} companies. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
                 : progress.status === "error"
@@ -1274,7 +1312,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                     : running
                       ? "Screening companies…"
                       : progress.status === "completed" || progress.status === "cancelled"
-                        ? "No options meet both min spread and min return %."
+                        ? emptyReportReason
                         : "Pick companies and run a report."}
                 </td>
               </tr>

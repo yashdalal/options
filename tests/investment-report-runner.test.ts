@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ScreenCandidate, ScreenSnapshot } from "@/domain/types";
 import {
+  aggregateScreenCoverage,
+  describeEmptyReportReason,
   isAbortError,
   runInvestmentReport,
   type ReportCompanyMeta,
@@ -90,6 +92,48 @@ describe("isAbortError", () => {
   it("rejects unrelated errors", () => {
     expect(isAbortError(new Error("boom"))).toBe(false);
     expect(isAbortError(null)).toBe(false);
+  });
+});
+
+describe("describeEmptyReportReason", () => {
+  it("explains missing buy quotes", () => {
+    expect(
+      describeEmptyReportReason(
+        aggregateScreenCoverage([
+          {
+            maxPerSide: 8,
+            nearBand: 10,
+            quoted: 8,
+            omittedByCap: 2,
+            noBid: 8,
+            belowSpreadMin: 0,
+            shown: 0,
+            meetsSpreadMinWithBid: 0,
+          },
+        ]),
+      ),
+    ).toBe(
+      "No buy quotes on 8 screened options across 1 company. Market may be closed.",
+    );
+  });
+
+  it("falls back to threshold wording when quotes existed", () => {
+    expect(
+      describeEmptyReportReason(
+        aggregateScreenCoverage([
+          {
+            maxPerSide: 8,
+            nearBand: 10,
+            quoted: 8,
+            omittedByCap: 2,
+            noBid: 0,
+            belowSpreadMin: 0,
+            shown: 3,
+            meetsSpreadMinWithBid: 3,
+          },
+        ]),
+      ),
+    ).toBe("No options meet both min spread and min return %.");
   });
 });
 

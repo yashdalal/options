@@ -2,6 +2,7 @@ import type {
   BoardMeetingInfo,
   InvestmentReportProgress,
   InvestmentReportRow,
+  ScreenCoverage,
   UnderlyingPriceRanges,
 } from "@/domain/types";
 import {
@@ -25,7 +26,65 @@ export type ReportCompanyMeta = {
   priceRangesError?: string;
   boardMeeting?: BoardMeetingInfo;
   boardMeetingError?: string;
+  coverage?: ScreenCoverage | null;
 };
+
+export type AggregatedScreenCoverage = {
+  companies: number;
+  nearBand: number;
+  quoted: number;
+  noBid: number;
+  belowSpreadMin: number;
+  shown: number;
+  meetsSpreadMinWithBid: number;
+};
+
+export function aggregateScreenCoverage(
+  coverages: Array<ScreenCoverage | null | undefined>,
+): AggregatedScreenCoverage {
+  const totals: AggregatedScreenCoverage = {
+    companies: 0,
+    nearBand: 0,
+    quoted: 0,
+    noBid: 0,
+    belowSpreadMin: 0,
+    shown: 0,
+    meetsSpreadMinWithBid: 0,
+  };
+  for (const coverage of coverages) {
+    if (!coverage) {
+      continue;
+    }
+    totals.companies += 1;
+    totals.nearBand += coverage.nearBand;
+    totals.quoted += coverage.quoted;
+    totals.noBid += coverage.noBid;
+    totals.belowSpreadMin += coverage.belowSpreadMin;
+    totals.shown += coverage.shown;
+    totals.meetsSpreadMinWithBid += coverage.meetsSpreadMinWithBid;
+  }
+  return totals;
+}
+
+export function describeEmptyReportReason(
+  coverage: AggregatedScreenCoverage | null,
+): string {
+  if (!coverage || coverage.companies === 0) {
+    return "No options meet both min spread and min return %.";
+  }
+  if (coverage.nearBand === 0) {
+    return "No options in the near spread band for the selected companies and side.";
+  }
+  if (coverage.shown === 0 && coverage.noBid > 0) {
+    const optionLabel = coverage.noBid === 1 ? "option" : "options";
+    const companyLabel = coverage.companies === 1 ? "company" : "companies";
+    return `No buy quotes on ${coverage.noBid} screened ${optionLabel} across ${coverage.companies} ${companyLabel}. Market may be closed.`;
+  }
+  if (coverage.shown === 0 && coverage.belowSpreadMin > 0) {
+    return "Quoted options are below the min spread %.";
+  }
+  return "No options meet both min spread and min return %.";
+}
 
 export type RunInvestmentReportParams = {
   companies: string[];
@@ -172,6 +231,7 @@ export async function runInvestmentReport(
             priceRangesError: result.snapshot.priceRangesError ?? undefined,
             boardMeeting: result.snapshot.boardMeeting ?? undefined,
             boardMeetingError: result.snapshot.boardMeetingError ?? undefined,
+            coverage: result.snapshot.coverage,
           });
 
           const nextRows = result.qualifying.map((candidate) => ({
