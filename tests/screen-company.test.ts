@@ -33,6 +33,8 @@ function candidate(partial: Partial<ScreenCandidate> & { id: string }): ScreenCa
     exchangeSegment: "nse_fo",
     tradingSymbol: "RELIANCE28AUG263000CE",
     margin: null,
+    spanMargin: null,
+    spanMarginError: null,
     annualizedReturnPct: null,
     meetsSpread: true,
     meetsReturn: null,
@@ -227,15 +229,19 @@ describe("enrichCandidatesWithMargins", () => {
         candidate({ id: "b", instrumentToken: "999", netPremium: 100, calendarDaysLeft: 30 }),
       ],
       [
-        { id: "a", instrumentToken: "123", margin: 10000 },
-        { id: "b", instrumentToken: "999", margin: 10000 },
+        { id: "a", instrumentToken: "123", margin: 10000, spanMargin: 9500 },
+        { id: "b", instrumentToken: "999", margin: 10000, spanMargin: null, spanMarginError: "unmapped" },
       ],
       24,
     );
 
     expect(rows[0].annualizedReturnPct).toBeCloseTo(36.5, 5);
     expect(rows[0].meetsReturn).toBe(true);
+    expect(rows[0].spanMargin).toBe(9500);
+    expect(rows[0].spanMarginError).toBeNull();
     expect(rows[1].meetsReturn).toBe(false);
+    expect(rows[1].spanMargin).toBeNull();
+    expect(rows[1].spanMarginError).toBe("unmapped");
   });
 });
 

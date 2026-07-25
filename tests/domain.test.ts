@@ -360,6 +360,8 @@ describe("screening math", () => {
       4,
     );
     expect(withBid.meetsReturn).toBe(true);
+    expect(withBid.spanMargin).toBeNull();
+    expect(withBid.spanMarginError).toBeNull();
 
     const noBid = buildScreenCandidate({
       company: "X",

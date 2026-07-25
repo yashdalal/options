@@ -32,6 +32,7 @@ import {
 } from "./market-data/yahoo-history";
 import { logInfo } from "./logging";
 import { handleBrokerAuthFailure } from "./session";
+import { calculateSingleLegSpanMargins } from "./span/service";
 
 async function loadBoardMeeting(company: string): Promise<{
   boardMeeting: BoardMeetingInfo | null;
@@ -65,6 +66,21 @@ export type MarginRequestItem = {
   tradingSymbol?: string;
   premium: number;
   quantity: number;
+  underlying: string;
+  expiryIso: string;
+  strike: number;
+  optionType: "CALL" | "PUT";
+  lots: number;
+  lotSize: number;
+};
+
+export type ScreenMarginResult = {
+  id?: string;
+  instrumentToken: string;
+  margin: number | null;
+  spanMargin: number | null;
+  spanMarginError?: string;
+  error?: string;
 };
 
 function firstSession(
@@ -331,7 +347,7 @@ export async function getScreenMargins(
   accountId: string | undefined,
   requestId: string,
   sessionId?: string,
-): Promise<{ id?: string; instrumentToken: string; margin: number | null; error?: string }[]> {
+): Promise<ScreenMarginResult[]> {
   const { accountId: resolvedAccountId, session } = resolveAccountSession(
     sessions,
     accountId,
@@ -342,40 +358,71 @@ export async function getScreenMargins(
     count: items.length,
   });
 
-  return Promise.all(
-    items.map(async (item) => {
-      try {
-        const margin = await checkMargin(session, {
-          instrumentToken: item.instrumentToken,
-          exchangeSegment: item.exchangeSegment ?? "nse_fo",
-          tradingSymbol: item.tradingSymbol,
-          price: item.premium,
-          quantity: item.quantity,
-          transactionType: "S",
-          product: "NRML",
-          orderType: "L",
-        });
-        return {
-          id: item.id,
-          instrumentToken: item.instrumentToken,
-          margin: margin.totalMarginUsed,
-        };
-      } catch (error) {
-        if (
-          typeof error === "object" &&
-          error &&
-          "code" in error &&
-          (error as { code: string }).code === "session_expired"
-        ) {
-          await handleBrokerAuthFailure(sessionId, resolvedAccountId, error);
+  const [kotakResults, spanResults] = await Promise.all([
+    Promise.all(
+      items.map(async (item) => {
+        try {
+          const margin = await checkMargin(session, {
+            instrumentToken: item.instrumentToken,
+            exchangeSegment: item.exchangeSegment ?? "nse_fo",
+            tradingSymbol: item.tradingSymbol,
+            price: item.premium,
+            quantity: item.quantity,
+            transactionType: "S",
+            product: "NRML",
+            orderType: "L",
+          });
+          return {
+            id: item.id,
+            instrumentToken: item.instrumentToken,
+            margin: margin.totalMarginUsed,
+          };
+        } catch (error) {
+          if (
+            typeof error === "object" &&
+            error &&
+            "code" in error &&
+            (error as { code: string }).code === "session_expired"
+          ) {
+            await handleBrokerAuthFailure(sessionId, resolvedAccountId, error);
+          }
+          return {
+            id: item.id,
+            instrumentToken: item.instrumentToken,
+            margin: null,
+            error: error instanceof Error ? error.message : "margin_failed",
+          };
         }
-        return {
-          id: item.id,
-          instrumentToken: item.instrumentToken,
-          margin: null,
-          error: error instanceof Error ? error.message : "margin_failed",
-        };
-      }
-    }),
+      }),
+    ),
+    calculateSingleLegSpanMargins(
+      items.map((item) => ({
+        id: item.id,
+        exchangeSegment: item.exchangeSegment ?? "nse_fo",
+        underlying: item.underlying,
+        expiryIso: item.expiryIso,
+        strike: item.strike,
+        optionType: item.optionType,
+        side: "SELL" as const,
+        lots: item.lots,
+        lotSize: item.lotSize,
+      })),
+    ),
+  ]);
+
+  const spanById = new Map(
+    spanResults
+      .filter((item) => item.id)
+      .map((item) => [item.id as string, item]),
   );
+
+  return kotakResults.map((kotak, index) => {
+    const span =
+      (kotak.id ? spanById.get(kotak.id) : undefined) ?? spanResults[index];
+    return {
+      ...kotak,
+      spanMargin: span?.spanMargin ?? null,
+      spanMarginError: span?.error,
+    };
+  });
 }

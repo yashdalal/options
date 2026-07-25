@@ -129,6 +129,56 @@ describe("span parse + engine", () => {
   });
 });
 
+describe("calculateSingleLegSpanMargins", () => {
+  it("returns per-leg SPAN totals and surfaces unsupported legs", async () => {
+    const { writeSpanSnapshot, resetSpanStoreForTests } = await import(
+      "@/server/span/store"
+    );
+    const { calculateSingleLegSpanMargins } = await import(
+      "@/server/span/service"
+    );
+    resetSpanStoreForTests();
+    const parsed = await parseSpnStream(fixturePath);
+    await writeSpanSnapshot(
+      { date: "20260724", variant: "i5", created: "202607241612" },
+      parsed.underlyings,
+    );
+
+    const results = await calculateSingleLegSpanMargins([
+      {
+        id: "ok",
+        exchangeSegment: "nse_fo",
+        underlying: "TESTCO",
+        expiryIso: "2026-07-28",
+        strike: 100,
+        optionType: "CALL",
+        side: "SELL",
+        lots: 1,
+        lotSize: 100,
+      },
+      {
+        id: "bse",
+        exchangeSegment: "bse_fo",
+        underlying: "TESTCO",
+        expiryIso: "2026-07-28",
+        strike: 100,
+        optionType: "CALL",
+        side: "SELL",
+        lots: 1,
+        lotSize: 100,
+      },
+    ]);
+
+    expect(results[0].id).toBe("ok");
+    expect(results[0].spanMargin).toBeGreaterThan(0);
+    expect(results[0].error).toBeUndefined();
+    expect(results[1].id).toBe("bse");
+    expect(results[1].spanMargin).toBeNull();
+    expect(results[1].error).toMatch(/nse_fo/i);
+    resetSpanStoreForTests();
+  });
+});
+
 describe("basket leg mapping", () => {
   it("maps sell legs to negative quantities", () => {
     const positions = basketLegsToSpanPositions([

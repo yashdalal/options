@@ -4,7 +4,7 @@ import {
   computePortfolioMargin,
   mergePositions,
 } from "./engine";
-import { SpanError } from "./errors";
+import { SpanError, isSpanError } from "./errors";
 import { EXPOSURE_SOURCE } from "./exposure";
 import { refreshSpanSnapshot } from "./fetch";
 import {
@@ -15,6 +15,16 @@ import {
 } from "./positions";
 import { readSpanManifest, readSpanUnderlyings } from "./store";
 import type { BasketMarginResult, SpanSnapshotMeta } from "./types";
+
+export type SingleLegSpanMarginInput = BasketLegInput & {
+  id?: string;
+};
+
+export type SingleLegSpanMarginResult = {
+  id?: string;
+  spanMargin: number | null;
+  error?: string;
+};
 
 const STALE_MS = 60 * 60 * 1000;
 
@@ -119,4 +129,78 @@ export async function calculateBasketMargin(input: {
       ...accountPositions,
     ]),
   };
+}
+
+export async function calculateSingleLegSpanMargins(
+  legs: SingleLegSpanMarginInput[],
+): Promise<SingleLegSpanMarginResult[]> {
+  if (legs.length === 0) {
+    return [];
+  }
+
+  const prepared = legs.map((leg) => {
+    try {
+      const [position] = basketLegsToSpanPositions([leg]);
+      return { leg, position, error: null as string | null };
+    } catch (error) {
+      return {
+        leg,
+        position: null,
+        error: error instanceof Error ? error.message : "span_failed",
+      };
+    }
+  });
+
+  const symbols = prepared
+    .map((row) => row.position?.underlying)
+    .filter((symbol): symbol is string => Boolean(symbol));
+
+  let underlyings: Awaited<ReturnType<typeof readSpanUnderlyings>> = null;
+  let snapshotError: string | null = null;
+  if (symbols.length > 0) {
+    try {
+      await ensureSpanSnapshot();
+      underlyings = await readSpanUnderlyings(symbols);
+      if (!underlyings) {
+        snapshotError = "SPAN snapshot unavailable";
+      }
+    } catch (error) {
+      snapshotError = isSpanError(error)
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "span_failed";
+    }
+  }
+
+  return prepared.map(({ leg, position, error }) => {
+    if (error || !position) {
+      return {
+        id: leg.id,
+        spanMargin: null,
+        error: error ?? "span_failed",
+      };
+    }
+    if (!underlyings) {
+      return {
+        id: leg.id,
+        spanMargin: null,
+        error: snapshotError ?? "SPAN snapshot unavailable",
+      };
+    }
+    try {
+      const margin = computePortfolioMargin([position], underlyings.underlyings);
+      return {
+        id: leg.id,
+        spanMargin: margin.total,
+      };
+    } catch (computeError) {
+      return {
+        id: leg.id,
+        spanMargin: null,
+        error:
+          computeError instanceof Error ? computeError.message : "span_failed",
+      };
+    }
+  });
 }

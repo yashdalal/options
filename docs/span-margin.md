@@ -55,4 +55,7 @@ Omit `accountId` for empty-book basket margin only.
 
 ## UI
 
-Options Screener tab: **+ Basket** on candidate rows, sticky basket tray with account picker, ΔM, and return-on-ΔM when all legs share one expiry.
+Options Screener tab:
+
+- Candidate rows show **Kotak margin** (check-margin API, used for ann. return) next to **SPAN margin** (single-leg empty-book SPAN + ELM, same engine as baskets) and a Δ% vs Kotak
+- **+ Basket** on candidate rows opens the sticky basket tray with account picker, portfolio ΔM, and return-on-ΔM when all legs share one expiry

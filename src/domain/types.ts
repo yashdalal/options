@@ -86,6 +86,8 @@ export type ScreenCandidate = {
   exchangeSegment: string;
   tradingSymbol: string;
   margin: number | null;
+  spanMargin: number | null;
+  spanMarginError: string | null;
   annualizedReturnPct: number | null;
   meetsSpread: boolean;
   meetsReturn: boolean | null;
