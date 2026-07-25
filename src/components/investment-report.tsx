@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -39,11 +40,19 @@ import {
   thresholdsEqual,
   type ThresholdPair,
 } from "@/lib/report-threshold-filter";
+import {
+  BasketTray,
+  isCandidateInBasket,
+  removeBasketLeg,
+  upsertBasketLeg,
+  type BasketLeg,
+} from "@/components/basket-tray";
 import { NumberInput } from "@/components/number-input";
 import { PriceRangeBars, optionSideBadgeClass, optionSideTextClass } from "@/components/price-range-bars";
 import { LoadingProgressBar } from "@/components/loading-progress-bar";
 
 const REPORT_CONCURRENCY = 2;
+const REPORT_COLUMN_COUNT = 10;
 const MAX_SELECTED_COMPANIES = 30;
 const EMPTY_NAME_BY_UNDERLYING: Record<string, string> = {};
 
@@ -167,6 +176,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   const [sortKey, setSortKey] = useState<ReportSortKey>("company");
   const [sortDir, setSortDir] = useState<ReportSortDir>("asc");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [basketLegs, setBasketLegs] = useState<BasketLeg[]>([]);
+  const [basketOpen, setBasketOpen] = useState(false);
+  const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(() => new Set());
   const abortRef = useRef<AbortController | null>(null);
   const runGenerationRef = useRef(0);
   const startedAtRef = useRef<number | null>(null);
@@ -422,6 +434,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       spreadMin: settings.spreadMin,
       returnMin: settings.returnMin,
     };
+    setBasketLegs([]);
+    setBasketOpen(false);
+    setExpandedRowIds(new Set());
     setRunBasis({
       expiryIso: selectedExpiry,
       companiesKey: companiesKey(companies),
@@ -714,7 +729,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   }, [progress.failed, progress.status, running, statusLabel]);
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 sm:p-6">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col lg:flex-row">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-zinc-100">
       <LoadingProgressBar
         active={running}
         label={
@@ -723,6 +739,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
             : "Screening companies"
         }
       />
+      <div
+        className={`mx-auto flex w-full flex-col gap-4 p-4 sm:p-6 ${
+          basketOpen ? "max-w-none" : "max-w-7xl"
+        }`}
+      >
       <header className="relative z-40 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -740,6 +761,15 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            {basketLegs.length > 0 && !basketOpen ? (
+              <button
+                type="button"
+                onClick={() => setBasketOpen(true)}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+              >
+                Basket ({basketLegs.length})
+              </button>
+            ) : null}
             {running ? (
               <button
                 type="button"
@@ -753,7 +783,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 type="button"
                 onClick={applyThresholdsOrRun}
                 disabled={
-                  metaLoading || !selectedExpiry || selectedCompanies.length === 0
+                  metaLoading ||
+                  !selectedExpiry ||
+                  selectedCompanies.length === 0
                 }
                 className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
               >
@@ -1143,15 +1175,15 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       </p>
 
       <div
-        className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
+        className={`overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
         aria-busy={running}
       >
-        <table className="min-w-full border-separate border-spacing-0 text-sm">
+        <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
             <tr>
               <th
                 ref={contextRowRef}
-                colSpan={11}
+                colSpan={REPORT_COLUMN_COUNT}
                 scope="colgroup"
                 className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-3 py-2.5 text-left font-normal"
                 aria-live="polite"
@@ -1237,24 +1269,23 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
             <tr className="text-left text-zinc-700">
               {(
                 [
+                  { heading: "Basket" },
                   { heading: "Setup", sort: "company" as const },
                   { heading: "Spot" },
                   { heading: "Strike" },
                   { heading: "Lots" },
                   { heading: "Spread %", sort: "spread" as const },
                   { heading: "Ann. return %", sort: "return" as const },
-                  { heading: "Diff ₹", title: "|strike − spot|" },
                   { heading: "Bid" },
                   { heading: "Net premium" },
                   { heading: "Margin" },
-                  { heading: "Board meeting" },
-                ] satisfies { heading: string; sort?: ReportSortKey; title?: string }[]
-              ).map(({ heading, sort, title }) => {
+                ] satisfies { heading: string; sort?: ReportSortKey }[]
+              ).map(({ heading, sort }) => {
                 const active = Boolean(sort && sortKey === sort);
+                const stickyAction = heading === "Basket";
                 return (
                   <th
                     key={heading}
-                    title={title}
                     aria-sort={
                       sort
                         ? active
@@ -1265,7 +1296,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                         : undefined
                     }
                     style={{ top: contextHeight }}
-                    className="sticky z-20 border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8]"
+                    className={`sticky z-20 border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8] ${
+                      stickyAction
+                        ? "left-0 z-30 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08),inset_0_-1px_0_#d4d4d8]"
+                        : ""
+                    }`}
                   >
                     {sort ? (
                       <button
@@ -1306,7 +1341,10 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
           <tbody>
             {sortedRows.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-3 py-8 text-center text-zinc-500">
+                <td
+                  colSpan={REPORT_COLUMN_COUNT}
+                  className="px-3 py-8 text-center text-zinc-500"
+                >
                   {metaLoading
                     ? "Loading companies…"
                     : running
@@ -1317,28 +1355,79 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 </td>
               </tr>
             ) : (
-              sortedRows.map((row, index) => (
+              sortedRows.map((row, index) => {
+                const inBasket = isCandidateInBasket(basketLegs, row);
+                const nseOnly = row.exchangeSegment.toLowerCase() === "nse_fo";
+                const expanded = expandedRowIds.has(row.id);
+                return (
+                <Fragment key={row.id}>
                 <tr
-                  key={row.id}
                   className={`${index % 2 === 0 ? "bg-white" : "bg-zinc-50"} font-medium ${optionSideTextClass(row.optionType)}`}
                 >
+                  <td
+                    className={`sticky left-0 z-10 border-b border-zinc-100 px-3 py-2 whitespace-nowrap shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08)] ${
+                      index % 2 === 0 ? "bg-white" : "bg-zinc-50"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (inBasket) {
+                          const next = removeBasketLeg(basketLegs, row);
+                          setBasketLegs(next);
+                          if (next.length === 0) {
+                            setBasketOpen(false);
+                          }
+                          return;
+                        }
+                        setBasketLegs(upsertBasketLeg(basketLegs, row));
+                        setBasketOpen(true);
+                      }}
+                      disabled={!nseOnly}
+                      title={
+                        !nseOnly
+                          ? "Only NSE F&O legs can be added to the SPAN basket"
+                          : inBasket
+                            ? "Remove from basket"
+                            : "Add sell leg to basket"
+                      }
+                      className={
+                        inBasket
+                          ? "rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                          : "rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      }
+                    >
+                      {inBasket ? "Added" : "Add"}
+                    </button>
+                  </td>
                   <td className="border-b border-zinc-100 px-3 py-2.5">
-                    <div className="flex min-w-[16rem] flex-col gap-1.5">
-                      <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-semibold">{row.company}</span>
                         <span
                           className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ring-1 ring-inset ${optionSideBadgeClass(row.optionType)}`}
                         >
                           {row.optionType === "CALL" ? "Call" : "Put"}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedRowIds((current) => {
+                              const next = new Set(current);
+                              if (next.has(row.id)) {
+                                next.delete(row.id);
+                              } else {
+                                next.add(row.id);
+                              }
+                              return next;
+                            });
+                          }}
+                          aria-expanded={expanded}
+                          className="rounded px-1 text-xs font-medium text-zinc-600 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900 hover:decoration-zinc-600"
+                        >
+                          {expanded ? "Hide details" : "Details"}
+                        </button>
                       </div>
-                      <PriceRangeBars
-                        ranges={priceRangesByCompany[row.company]}
-                        spot={row.spot}
-                        strike={row.strike}
-                        error={priceRangesErrorByCompany[row.company] ?? null}
-                        compact
-                      />
                     </div>
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
@@ -1363,9 +1452,6 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                     {formatPercent(row.annualizedReturnPct)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
-                    {formatRupees(row.priceDiffInr)}
-                  </td>
-                  <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatRupees(row.premium)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
@@ -1374,18 +1460,82 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatRupees(row.margin, 0)}
                   </td>
-                  <td className="border-b border-zinc-100 px-3 py-2.5 whitespace-nowrap">
-                    <BoardMeetingCell
-                      meeting={boardMeetingByCompany[row.company]}
-                      error={boardMeetingErrorByCompany[row.company]}
-                    />
-                  </td>
                 </tr>
-              ))
+                {expanded ? (
+                  <tr className={index % 2 === 0 ? "bg-white" : "bg-zinc-50"}>
+                    <td
+                      colSpan={REPORT_COLUMN_COUNT}
+                      className="border-b border-zinc-100 px-3 py-3"
+                    >
+                      <div className="flex flex-wrap items-start gap-x-8 gap-y-4 pl-1">
+                        <div className="min-w-[14rem] max-w-md flex-1 space-y-1.5">
+                          <p className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                            Highs / lows
+                          </p>
+                          <PriceRangeBars
+                            ranges={priceRangesByCompany[row.company]}
+                            spot={row.spot}
+                            strike={row.strike}
+                            error={priceRangesErrorByCompany[row.company] ?? null}
+                            compact
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                            Board meeting
+                          </p>
+                          <div className="text-sm font-medium text-zinc-900">
+                            <BoardMeetingCell
+                              meeting={boardMeetingByCompany[row.company]}
+                              error={boardMeetingErrorByCompany[row.company]}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <p
+                            className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase"
+                            title="|strike − spot|"
+                          >
+                            Diff ₹
+                          </p>
+                          <p className="text-sm font-medium tabular-nums text-zinc-900">
+                            {formatRupees(row.priceDiffInr)}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
+                </Fragment>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
+      </div>
+      </div>
+
+      {basketOpen ? (
+        <aside className="flex min-h-0 w-full shrink-0 flex-col border-t border-zinc-200 bg-white lg:h-full lg:w-80 lg:border-t-0 lg:border-l">
+          <BasketTray
+            legs={basketLegs}
+            onChangeLegs={(next) => {
+              setBasketLegs(next);
+              if (next.length === 0) {
+                setBasketOpen(false);
+              }
+            }}
+            onLoginRequired={onLoginRequired}
+            preferredAccountId={settings.accountId}
+            onClose={() => setBasketOpen(false)}
+            onClear={() => {
+              setBasketLegs([]);
+              setBasketOpen(false);
+            }}
+          />
+        </aside>
+      ) : null}
     </div>
   );
 }

@@ -13,6 +13,7 @@ Local-first Next.js dashboard that monitors open NSE option positions from three
 - Editable highlight threshold stored in browser local storage
 - Manual refresh plus optional 60-second auto refresh
 - **Screener tab:** pick one F&O company + expiry, filter short CE/PE by min OTM spread, deduct Kotak sell charges automatically, then lazy-load check-margin for annualized return
+- **Basket margin:** add screener rows to a tray, compute NSE SPAN + ELM for the multi-leg book (optional incremental ΔM vs one Kotak account). See [docs/span-margin.md](docs/span-margin.md)
 
 ## Prerequisites
 
