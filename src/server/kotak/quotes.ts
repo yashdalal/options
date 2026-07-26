@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { kotakFetch } from "./client";
+import { detectBrokerFailure } from "./broker-response";
 import { KotakApiError } from "./errors";
 import type { TradeSessionCredentials } from "./auth";
-import { logWarn } from "../logging";
 import { getKotakRateLimiter } from "./rate-limit";
 
 const depthLevelSchema = z
@@ -189,7 +189,12 @@ export function resolveYearLow(item: z.infer<typeof quoteItemSchema>): number | 
 function extractItems(payload: unknown): z.infer<typeof quoteItemSchema>[] {
   const parsed = quotesResponseSchema.safeParse(payload);
   if (!parsed.success) {
-    return [];
+    throw new KotakApiError(
+      "Unexpected quote response shape",
+      502,
+      "invalid_response",
+      payload,
+    );
   }
   if (Array.isArray(parsed.data)) {
     return parsed.data;
@@ -272,6 +277,16 @@ async function fetchQuoteBatch(
     }),
   );
 
+  const failure = detectBrokerFailure(payload);
+  if (failure) {
+    throw new KotakApiError(
+      failure.message || "Quote request failed",
+      502,
+      "bad_request",
+      payload,
+    );
+  }
+
   const results: InstrumentQuote[] = [];
   const matchedKeys = new Set<string>();
   const items = extractItems(payload);
@@ -333,18 +348,8 @@ export async function fetchQuotes(
   const results: InstrumentQuote[] = [];
 
   for (const batch of chunk([...unique.values()], batchSize)) {
-    try {
-      const batchResults = await fetchQuoteBatch(session, batch);
-      results.push(...batchResults);
-    } catch (error) {
-      logWarn("Quote batch failed", {
-        size: batch.length,
-        error: error instanceof Error ? error.message : "unknown",
-      });
-      for (const item of batch) {
-        results.push(emptyQuote(item));
-      }
-    }
+    const batchResults = await fetchQuoteBatch(session, batch);
+    results.push(...batchResults);
   }
 
   if (instruments.length > 0 && results.length === 0) {

@@ -107,13 +107,19 @@ async function buildSnapshot(
   }
 
   logInfo("Downloading prices...");
-  const quotes = await fetchSpotQuotes(
-    firstSession,
-    instruments.map((item) => ({
-      instrumentToken: item.instrumentToken,
-      exchangeSegment: item.exchangeSegment,
-    })),
-  );
+  let quotes: Awaited<ReturnType<typeof fetchSpotQuotes>>;
+  try {
+    quotes = await fetchSpotQuotes(
+      firstSession,
+      instruments.map((item) => ({
+        instrumentToken: item.instrumentToken,
+        exchangeSegment: item.exchangeSegment,
+      })),
+    );
+  } catch (error) {
+    await handleBrokerAuthFailure(sessionId, ACCOUNT_DEFINITIONS[0].id, error);
+    throw error;
+  }
 
   const quoteByToken = new Map(
     quotes.map((quote) => [`${quote.exchangeSegment}:${quote.instrumentToken}`, quote]),

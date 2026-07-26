@@ -194,6 +194,7 @@ export async function getScreenSnapshot(
       ACCOUNT_DEFINITIONS[0].id,
       error,
     );
+    throw error;
   }
 
   let priceRanges = emptyPriceRanges();
@@ -248,15 +249,25 @@ export async function getScreenSnapshot(
   const quoted = selected.length;
   const omittedByCap = Math.max(0, nearBand - quoted);
 
-  const optionQuotes = selected.length
-    ? await fetchQuotes(
+  let optionQuotes: Awaited<ReturnType<typeof fetchQuotes>> = [];
+  if (selected.length) {
+    try {
+      optionQuotes = await fetchQuotes(
         session,
         selected.map((option) => ({
           instrumentToken: option.instrumentToken,
           exchangeSegment: option.exchangeSegment,
         })),
-      )
-    : [];
+      );
+    } catch (error) {
+      await handleBrokerAuthFailure(
+        sessionId,
+        ACCOUNT_DEFINITIONS[0].id,
+        error,
+      );
+      throw error;
+    }
+  }
   const quoteByToken = new Map(
     optionQuotes.map((quote) => [
       `${quote.exchangeSegment}:${quote.instrumentToken}`,
