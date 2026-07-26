@@ -28,6 +28,7 @@ import {
   filterCompanyChoices,
   listExpiriesForSelection,
   screenCompany,
+  usesSpanMarginForReturn,
 } from "@/lib/screen-company";
 import {
   aggregateScreenCoverage,
@@ -1130,15 +1131,18 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   <div className="flex flex-col gap-1">
                     <dt className="font-medium text-zinc-800">Ann. return %</dt>
                     <dd className="font-mono text-xs text-zinc-600">
-                      (net premium / margin) × (365 / calendar days) × 100
+                      (net premium / margin) × (365 / calendar days) × 100. Uses Kotak
+                      margin when available; otherwise SPAN + ELM (warn icon on the return —
+                      verify with the broker before trading).
                     </dd>
                   </div>
                   <div className="flex flex-col gap-1">
                     <dt className="font-medium text-zinc-800">Bid / Margin</dt>
                     <dd className="text-xs text-zinc-600">
                       Bid from order-book buy depth; primary margin from broker check-margin
-                      API (used for ann. return). Muted line under it is single-leg SPAN + ELM
-                      (same math as baskets) with Δ% vs Kotak
+                      API. Muted line is single-leg SPAN + ELM (same math as baskets) with Δ%
+                      vs Kotak. If Kotak fails, SPAN is used for ann. return and the return
+                      cell shows a warning icon.
                     </dd>
                   </div>
                 </dl>
@@ -1451,7 +1455,39 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                     {formatPercent(row.spreadPct)}
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 font-semibold tabular-nums">
-                    {formatPercent(row.annualizedReturnPct)}
+                    <span className="inline-flex items-center gap-1">
+                      {formatPercent(row.annualizedReturnPct)}
+                      {usesSpanMarginForReturn(row) ? (
+                        <span
+                          tabIndex={0}
+                          className="group relative inline-flex cursor-help text-amber-600 outline-none"
+                        >
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="size-3.5 shrink-0"
+                            aria-hidden="true"
+                          >
+                            <path
+                              fill="currentColor"
+                              d="M8.86 1.5a1 1 0 0 0-1.72 0L.66 12.2A1 1 0 0 0 1.52 13.7h12.96a1 1 0 0 0 .86-1.5L8.86 1.5ZM8 5.25a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-1.5 0V6A.75.75 0 0 1 8 5.25Zm0 6a.875.875 0 1 1 0-1.75A.875.875 0 0 1 8 11.25Z"
+                            />
+                          </svg>
+                          <span
+                            role="tooltip"
+                            className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 w-64 -translate-x-1/2 rounded-lg bg-zinc-900 px-2.5 py-2 text-left text-xs font-normal text-zinc-50 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                          >
+                            Couldn’t fetch margin via Kotak’s API, so this return
+                            uses local SPAN + ELM math as a fallback. Verify
+                            actual margin in Kotak before making the trade.
+                          </span>
+                          <span className="sr-only">
+                            Couldn’t fetch margin via Kotak’s API, so this return
+                            uses local SPAN + ELM math as a fallback. Verify
+                            actual margin in Kotak before making the trade.
+                          </span>
+                        </span>
+                      ) : null}
+                    </span>
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     {formatRupees(row.premium)}
@@ -1461,20 +1497,36 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                   </td>
                   <td className="border-b border-zinc-100 px-3 py-2 tabular-nums">
                     <div className="flex flex-col gap-0.5">
-                      <span>{formatRupees(row.margin, 0)}</span>
+                      <span
+                        className={
+                          usesSpanMarginForReturn(row) ? "text-zinc-400" : undefined
+                        }
+                        title={
+                          usesSpanMarginForReturn(row)
+                            ? "Kotak check-margin unavailable"
+                            : undefined
+                        }
+                      >
+                        {formatRupees(row.margin, 0)}
+                      </span>
                       {row.spanMargin !== null ? (
                         <span
                           className="text-[11px] font-normal text-zinc-400"
                           title={
-                            row.margin !== null && row.margin > 0
-                              ? `SPAN ${formatRupees(row.spanMargin, 0)} (${(((row.spanMargin - row.margin) / row.margin) * 100).toFixed(1)}% vs Kotak)`
-                              : `SPAN ${formatRupees(row.spanMargin, 0)}`
+                            usesSpanMarginForReturn(row)
+                              ? `SPAN ${formatRupees(row.spanMargin, 0)} used for ann. return (Kotak unavailable)`
+                              : row.margin !== null && row.margin > 0
+                                ? `SPAN ${formatRupees(row.spanMargin, 0)} (${(((row.spanMargin - row.margin) / row.margin) * 100).toFixed(1)}% vs Kotak)`
+                                : `SPAN ${formatRupees(row.spanMargin, 0)}`
                           }
                         >
+                          {usesSpanMarginForReturn(row) ? "SPAN " : ""}
                           {formatRupees(row.spanMargin, 0)}
                           {row.margin !== null && row.margin > 0
                             ? ` (${(((row.spanMargin - row.margin) / row.margin) * 100).toFixed(1)}%)`
-                            : ""}
+                            : usesSpanMarginForReturn(row)
+                              ? " (est.)"
+                              : ""}
                         </span>
                       ) : row.spanMarginError ? (
                         <span

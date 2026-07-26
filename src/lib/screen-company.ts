@@ -27,16 +27,25 @@ export type ScreenCompanyResult = {
   qualifying: ScreenCandidate[];
 };
 
+export type ScreenMarginResult = {
+  id?: string;
+  instrumentToken: string;
+  margin: number | null;
+  spanMargin?: number | null;
+  spanMarginError?: string;
+  error?: string;
+};
+
+/** True when ann. return used SPAN because Kotak check-margin was unavailable. */
+export function usesSpanMarginForReturn(
+  row: Pick<ScreenCandidate, "margin" | "spanMargin">,
+): boolean {
+  return row.margin === null && row.spanMargin !== null;
+}
+
 export function enrichCandidatesWithMargins(
   candidates: ScreenCandidate[],
-  margins: {
-    id?: string;
-    instrumentToken: string;
-    margin: number | null;
-    spanMargin?: number | null;
-    spanMarginError?: string;
-    error?: string;
-  }[],
+  margins: ScreenMarginResult[],
   returnMin: number,
 ): ScreenCandidate[] {
   const byId = new Map(
@@ -51,22 +60,26 @@ export function enrichCandidatesWithMargins(
     if (!result || candidate.netPremium === null) {
       return candidate;
     }
-    const annualizedReturnPct =
-      result.margin === null
-        ? null
-        : calculateAnnualizedReturnPct(
-            candidate.netPremium,
-            result.margin,
-            candidate.calendarDaysLeft,
-          );
+    const spanMargin = result.spanMargin ?? null;
+    const spanMarginError = result.spanMarginError ?? null;
+    const marginForReturn = result.margin ?? spanMargin;
+    if (marginForReturn === null) {
+      throw new Error(
+        result.error ?? spanMarginError ?? "Unable to load margins",
+      );
+    }
+    const annualizedReturnPct = calculateAnnualizedReturnPct(
+      candidate.netPremium,
+      marginForReturn,
+      candidate.calendarDaysLeft,
+    );
     return {
       ...candidate,
       margin: result.margin,
-      spanMargin: result.spanMargin ?? null,
-      spanMarginError: result.spanMarginError ?? null,
+      spanMargin,
+      spanMarginError,
       annualizedReturnPct,
-      meetsReturn:
-        annualizedReturnPct === null ? null : annualizedReturnPct >= returnMin,
+      meetsReturn: annualizedReturnPct >= returnMin,
     };
   });
 }
@@ -319,6 +332,7 @@ async function loadMarginsForCandidates(
   accountId: AccountId,
   returnMin: number,
   signal?: AbortSignal,
+  symbol?: string,
 ): Promise<ScreenCandidate[]> {
   const marginRows = candidates.filter(
     (row) => row.hasBid && row.premium !== null && row.premium > 0,
@@ -329,6 +343,9 @@ async function loadMarginsForCandidates(
 
   const chunkSize = 5;
   let enriched = candidates;
+  const marginFailureMessage = symbol
+    ? `Unable to load margins for ${symbol}`
+    : "Unable to load margins";
 
   for (let index = 0; index < marginRows.length; index += chunkSize) {
     if (signal?.aborted) {
@@ -363,19 +380,24 @@ async function loadMarginsForCandidates(
       } satisfies ScreenCompanyAuthError);
     }
     if (!response.ok) {
-      continue;
+      throw new Error(marginFailureMessage);
     }
     const payload = (await response.json()) as {
-      margins: {
-        id?: string;
-        instrumentToken: string;
-        margin: number | null;
-        spanMargin?: number | null;
-        spanMarginError?: string;
-        error?: string;
-      }[];
+      margins: ScreenMarginResult[];
     };
-    enriched = enrichCandidatesWithMargins(enriched, payload.margins, returnMin);
+    enriched = enrichCandidatesWithMargins(
+      enriched,
+      payload.margins,
+      returnMin,
+    );
+  }
+
+  const unresolved = marginRows.some((row) => {
+    const match = enriched.find((candidate) => candidate.id === row.id);
+    return match?.margin === null && match?.spanMargin === null;
+  });
+  if (unresolved) {
+    throw new Error(marginFailureMessage);
   }
 
   return enriched;
@@ -410,6 +432,7 @@ export async function screenCompany(
     params.accountId,
     params.returnMin,
     params.signal,
+    params.symbol,
   );
   return {
     snapshot: { ...snapshot, candidates },
