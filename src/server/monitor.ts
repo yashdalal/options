@@ -86,13 +86,16 @@ async function buildSnapshot(
     instrumentToken: string;
     exchangeSegment: string;
   }[] = [];
-  const spotByCompany = new Map<string, number | null>();
+  const spotByCompany = new Map<
+    string,
+    { spot: number | null; fromPreviousClose: boolean }
+  >();
   const missingSymbols: string[] = [];
 
   for (const company of companies) {
     const cash = resolveCashInstrument(registry, company);
     if (!cash) {
-      spotByCompany.set(company, null);
+      spotByCompany.set(company, { spot: null, fromPreviousClose: false });
       missingSymbols.push(company);
       continue;
     }
@@ -122,11 +125,17 @@ async function buildSnapshot(
     );
     const spot = quote?.spot ?? null;
     if (spot === null || spot <= 0) {
-      spotByCompany.set(instrument.company, null);
+      spotByCompany.set(instrument.company, {
+        spot: null,
+        fromPreviousClose: false,
+      });
       missingSymbols.push(instrument.company);
       continue;
     }
-    spotByCompany.set(instrument.company, spot);
+    spotByCompany.set(instrument.company, {
+      spot,
+      fromPreviousClose: quote?.spotFromPreviousClose ?? false,
+    });
   }
 
   const uniqueMissing = [...new Set(missingSymbols)].sort();

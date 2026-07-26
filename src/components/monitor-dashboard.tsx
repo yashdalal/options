@@ -6,6 +6,7 @@ import { shouldHighlightRow, shouldHighlightSide } from "@/domain/proximity";
 import { formatNumber, formatPercent, formatRupees } from "@/lib/format";
 import { companyMatchesQuery } from "@/lib/screen-company";
 import { LoadingProgressBar } from "@/components/loading-progress-bar";
+import { WarnHoverTip } from "@/components/warn-hover-tip";
 
 const THRESHOLD_KEY = "near_expiry_highlight_threshold";
 const SHOW_NEAR_ONLY_KEY = "near_expiry_show_near_only";
@@ -624,7 +625,16 @@ export function MonitorDashboard({
                       </span>
                     </td>
                     <td className="border-b border-zinc-100 px-3 py-2">
-                      {formatRupees(row.spot)}
+                      <span className="inline-flex items-center gap-1.5">
+                        {formatRupees(row.spot)}
+                        {row.spotFromPreviousClose ? (
+                          <WarnHoverTip>
+                            Couldn’t fetch today’s LTP via Kotak’s API, so this
+                            spot uses previous-day close as a fallback. Verify
+                            the live price in Kotak before making the trade.
+                          </WarnHoverTip>
+                        ) : null}
+                      </span>
                     </td>
                     <SideCells side={row.call} highlighted={callHighlighted} />
                     <SideCells side={row.put} highlighted={putHighlighted} />
@@ -659,7 +669,17 @@ export function MonitorDashboard({
                         </span>
                       </td>
                       <td className="border-b border-zinc-100 px-3 py-2 text-zinc-400">
-                        {formatRupees(row.spot)}
+                        <span className="inline-flex items-center gap-1.5">
+                          {formatRupees(row.spot)}
+                          {row.spotFromPreviousClose ? (
+                            <WarnHoverTip>
+                              Couldn’t fetch today’s LTP via Kotak’s API, so
+                              this spot uses previous-day close as a fallback.
+                              Verify the live price in Kotak before making the
+                              trade.
+                            </WarnHoverTip>
+                          ) : null}
+                        </span>
                       </td>
                       <SideCells side={detail.call} highlighted={detailCallHighlighted} />
                       <SideCells side={detail.put} highlighted={detailPutHighlighted} />

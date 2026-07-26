@@ -230,6 +230,7 @@ export function buildScreenCandidate(input: {
   company: string;
   option: ScreenableOption;
   spot: number;
+  spotFromPreviousClose?: boolean;
   premium: number | null;
   lots: number;
   daysLeft: number;
@@ -260,6 +261,7 @@ export function buildScreenCandidate(input: {
     optionType: input.option.optionType,
     strike: input.option.strike,
     spot: input.spot,
+    spotFromPreviousClose: input.spotFromPreviousClose ?? false,
     spreadPct,
     priceDiffInr: Math.abs(input.option.strike - input.spot),
     premium,

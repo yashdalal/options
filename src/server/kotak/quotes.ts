@@ -72,11 +72,14 @@ export type QuoteDepthLevel = {
   orders: number;
 };
 
+export type LtpSource = "ltp" | "previous_close";
+
 export type InstrumentQuote = {
   instrumentToken: string;
   exchangeSegment: string;
   tradingSymbol?: string;
   ltp: number | null;
+  ltpSource: LtpSource | null;
   bestBid: number | null;
   bestAsk: number | null;
   buyDepth: QuoteDepthLevel[];
@@ -87,6 +90,8 @@ export type SpotQuote = {
   exchangeSegment: string;
   tradingSymbol?: string;
   spot: number | null;
+  /** True when spot came from ohlc.close because ltp / last_traded_price were missing. */
+  spotFromPreviousClose: boolean;
 };
 
 function toNumber(value: unknown): number | null {
@@ -137,12 +142,20 @@ export function parseBuyDepth(
   return parsed;
 }
 
-function resolveLtp(item: z.infer<typeof quoteItemSchema>): number | null {
-  return (
-    toNumber(item.ltp) ??
-    toNumber(item.last_traded_price) ??
-    toNumber(item.ohlc?.close)
-  );
+export function resolveLtp(item: z.infer<typeof quoteItemSchema>): {
+  ltp: number | null;
+  source: LtpSource | null;
+} {
+  const sessionLtp =
+    toNumber(item.ltp) ?? toNumber(item.last_traded_price);
+  if (sessionLtp !== null) {
+    return { ltp: sessionLtp, source: "ltp" };
+  }
+  const previousClose = toNumber(item.ohlc?.close);
+  if (previousClose !== null) {
+    return { ltp: previousClose, source: "previous_close" };
+  }
+  return { ltp: null, source: null };
 }
 
 export function resolveBestBid(item: z.infer<typeof quoteItemSchema>): number | null {
@@ -274,11 +287,13 @@ async function fetchQuoteBatch(
     if (requested) {
       matchedKeys.add(`${requested.exchangeSegment}:${requested.instrumentToken}`);
     }
+    const resolved = resolveLtp(item);
     results.push({
       instrumentToken: requested?.instrumentToken ?? quoteToken,
       exchangeSegment: requested?.exchangeSegment ?? (segment || "nse_cm"),
       tradingSymbol: item.trading_symbol ?? item.display_symbol,
-      ltp: resolveLtp(item),
+      ltp: resolved.ltp,
+      ltpSource: resolved.source,
       bestBid: resolveBestBid(item),
       bestAsk: resolveBestAsk(item),
       buyDepth: parseBuyDepth(item.depth?.buy),
@@ -298,6 +313,7 @@ function emptyQuote(item: InstrumentRef): InstrumentQuote {
     instrumentToken: item.instrumentToken,
     exchangeSegment: item.exchangeSegment,
     ltp: null,
+    ltpSource: null,
     bestBid: null,
     bestAsk: null,
     buyDepth: [],
@@ -349,5 +365,6 @@ export async function fetchSpotQuotes(
     exchangeSegment: quote.exchangeSegment,
     tradingSymbol: quote.tradingSymbol,
     spot: quote.ltp,
+    spotFromPreviousClose: quote.ltpSource === "previous_close",
   }));
 }

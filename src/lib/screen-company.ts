@@ -73,6 +73,11 @@ export function enrichCandidatesWithMargins(
       marginForReturn,
       candidate.calendarDaysLeft,
     );
+    if (annualizedReturnPct === null) {
+      throw new Error(
+        result.error ?? spanMarginError ?? "Unable to load margins",
+      );
+    }
     return {
       ...candidate,
       margin: result.margin,

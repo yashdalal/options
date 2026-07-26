@@ -45,7 +45,9 @@ Official Postman also shows quotes with a trailing `/{quote_type}` (for example 
 ## Spot price
 
 Use full quotes (not `/ohlc`). Prefer `ltp` / `last_traded_price` for Spot.
-`ohlc.close` is previous-day close and is only a fallback.
+`ohlc.close` is previous-day close. The app may use it when session LTP fields are
+missing, but marks `spotFromPreviousClose` so the UI shows a warning — never treat
+that value as a silent live LTP.
 
 ## 52-week high / low
 

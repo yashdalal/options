@@ -11,7 +11,7 @@ Read-only against the broker: the app fetches positions, quotes, scrip master, a
 - Combines open positions from all three accounts into one report, tagged by account
 - Resolves underlyings, strikes, expiries, and lot sizes from Kotak's daily scrip master
 - Groups by expiry and company; same-strike calls/puts across accounts merge into one row (expand for per-account legs)
-- Spot comes from the Kotak quote `ltp` — today's session price, or the day's close after hours
+- Spot comes from the Kotak quote `ltp` / `last_traded_price`. If those are missing, previous-day `ohlc.close` is used with a warning icon (not shown as a silent live LTP)
 - Editable highlight threshold (% distance from strike) plus a "show near only" filter, both persisted in browser local storage
 - Manual refresh plus 60-second auto refresh (on by default, toggleable, paused while the tab is hidden). A failed refresh keeps the last snapshot but flags it as stale
 
@@ -162,7 +162,6 @@ Vitest covers `tests/**/*.test.ts` in a Node environment — domain math, SPAN e
 
 ## Known gaps
 
-- Spot resolution falls back to `ohlc.close` when a quote has no `ltp` or `last_traded_price` (`src/server/kotak/quotes.ts`). That substitutes a previous-session price for a live one, which conflicts with the fail-visibly policy in `AGENTS.md`.
 - `@testing-library/react` and `jsdom` are installed but the Vitest environment is `node`, so no component tests run today.
 
 ## Hosting

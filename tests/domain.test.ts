@@ -260,8 +260,33 @@ describe("buildExpiryGroups", () => {
     const mmRow = july?.rows.find((row) => row.company === "M&M");
     expect(mmRow?.details[0]?.accountLabel).toBe("Prakash");
     expect(mmRow?.spot).toBeNull();
+    expect(mmRow?.spotFromPreviousClose).toBe(false);
     expect(mmRow?.call?.inrNear).toBeNull();
     expect(mmRow?.call?.pctNear).toBeNull();
+  });
+
+  it("marks rows when company spot came from previous-day close", () => {
+    const normalized = normalizePositions(
+      positionsFixture.data as RawPosition[],
+      registryFromFixtures(),
+      prakashAccount,
+    );
+    const groups = buildExpiryGroups(
+      normalized,
+      new Map([
+        ["SBIN", { spot: 868.5, fromPreviousClose: true }],
+        ["BOSCHLTD", { spot: 45100, fromPreviousClose: false }],
+        ["M&M", { spot: null, fromPreviousClose: false }],
+      ]),
+    );
+    const sbin = groups
+      .flatMap((group) => group.rows)
+      .find((row) => row.company === "SBIN");
+    const bosch = groups
+      .flatMap((group) => group.rows)
+      .find((row) => row.company === "BOSCHLTD");
+    expect(sbin?.spotFromPreviousClose).toBe(true);
+    expect(bosch?.spotFromPreviousClose).toBe(false);
   });
 
   it("combines overlapping company positions across accounts and sorts by company", () => {
@@ -360,8 +385,23 @@ describe("screening math", () => {
       4,
     );
     expect(withBid.meetsReturn).toBe(true);
+    expect(withBid.spotFromPreviousClose).toBe(false);
     expect(withBid.spanMargin).toBeNull();
     expect(withBid.spanMarginError).toBeNull();
+
+    const fromClose = buildScreenCandidate({
+      company: "X",
+      option,
+      spot: 1000,
+      spotFromPreviousClose: true,
+      premium: 10,
+      lots: 1,
+      daysLeft: 30,
+      spreadMin: 18,
+      returnMin: 20,
+      margin: 50_000,
+    });
+    expect(fromClose.spotFromPreviousClose).toBe(true);
 
     const noBid = buildScreenCandidate({
       company: "X",

@@ -101,14 +101,28 @@ function buildDetails(
     }));
 }
 
+export type CompanySpot = {
+  spot: number | null;
+  fromPreviousClose: boolean;
+};
+
 export function pairPositionsForCompany(
   positions: NormalizedPosition[],
-  spot: number | null,
+  companySpot: CompanySpot | number | null,
 ): ReportRow[] {
   const sample = positions[0];
   if (!sample) {
     return [];
   }
+
+  const spot =
+    typeof companySpot === "object" && companySpot !== null
+      ? companySpot.spot
+      : companySpot;
+  const spotFromPreviousClose =
+    typeof companySpot === "object" && companySpot !== null
+      ? companySpot.fromPreviousClose
+      : false;
 
   const callsByStrike = groupByStrike(positions.filter((p) => p.optionType === "CALL"));
   const putsByStrike = groupByStrike(positions.filter((p) => p.optionType === "PUT"));
@@ -128,6 +142,7 @@ export function pairPositionsForCompany(
     rows.push({
       company: sample.company,
       spot,
+      spotFromPreviousClose,
       call:
         callStrike === undefined || callPositions.length === 0
           ? null
@@ -145,7 +160,7 @@ export function pairPositionsForCompany(
 
 export function buildExpiryGroups(
   positions: NormalizedPosition[],
-  spotByCompany: Map<string, number | null>,
+  spotByCompany: Map<string, CompanySpot | number | null>,
 ): { expiryIso: string; expiryLabel: string; rows: ReportRow[] }[] {
   const byExpiry = new Map<string, NormalizedPosition[]>();
 

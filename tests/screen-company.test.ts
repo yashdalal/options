@@ -21,6 +21,7 @@ function candidate(partial: Partial<ScreenCandidate> & { id: string }): ScreenCa
     optionType: "CALL",
     strike: 3000,
     spot: 2500,
+    spotFromPreviousClose: false,
     spreadPct: 20,
     priceDiffInr: 500,
     premium: 10,
@@ -309,6 +310,7 @@ describe("screenCompany margin failures", () => {
       company: "RELIANCE",
       expiryIso: "2026-08-28",
       spot: 2500,
+      spotFromPreviousClose: false,
       calendarDaysLeft: 30,
       workingDaysLeft: 20,
       coverage: {

@@ -159,6 +159,7 @@ export async function getScreenSnapshot(
       company,
       expiryIso: query.expiryIso,
       spot: null,
+      spotFromPreviousClose: false,
       calendarDaysLeft: null,
       workingDaysLeft: null,
       coverage: null,
@@ -177,6 +178,7 @@ export async function getScreenSnapshot(
   const tradingDaysLeft = workingDaysLeft(query.expiryIso);
 
   let spot: number | null = null;
+  let spotFromPreviousClose = false;
   try {
     const spotQuotes = await fetchSpotQuotes(session, [
       {
@@ -185,6 +187,7 @@ export async function getScreenSnapshot(
       },
     ]);
     spot = spotQuotes[0]?.spot ?? null;
+    spotFromPreviousClose = spotQuotes[0]?.spotFromPreviousClose ?? false;
   } catch (error) {
     await handleBrokerAuthFailure(
       sessionId,
@@ -222,6 +225,7 @@ export async function getScreenSnapshot(
       company,
       expiryIso: query.expiryIso,
       spot: null,
+      spotFromPreviousClose: false,
       calendarDaysLeft: daysLeft,
       workingDaysLeft: tradingDaysLeft,
       coverage: null,
@@ -286,6 +290,7 @@ export async function getScreenSnapshot(
         company,
         option,
         spot,
+        spotFromPreviousClose,
         premium: fill.premium,
         lots: fill.lots,
         daysLeft,
@@ -321,6 +326,7 @@ export async function getScreenSnapshot(
     company,
     expiryIso: query.expiryIso,
     spot,
+    spotFromPreviousClose,
     calendarDaysLeft: daysLeft,
     workingDaysLeft: tradingDaysLeft,
     coverage: {

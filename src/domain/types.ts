@@ -36,6 +36,8 @@ export type ReportRowDetail = {
 export type ReportRow = {
   company: string;
   spot: number | null;
+  /** True when spot came from previous-day ohlc.close, not session LTP. */
+  spotFromPreviousClose: boolean;
   call: ReportSide | null;
   put: ReportSide | null;
   details: ReportRowDetail[];
@@ -72,6 +74,8 @@ export type ScreenCandidate = {
   optionType: OptionType;
   strike: number;
   spot: number;
+  /** True when spot came from previous-day ohlc.close, not session LTP. */
+  spotFromPreviousClose: boolean;
   spreadPct: number;
   priceDiffInr: number;
   premium: number | null;
@@ -126,6 +130,7 @@ export type ScreenSnapshot = {
   company: string;
   expiryIso: string;
   spot: number | null;
+  spotFromPreviousClose: boolean;
   calendarDaysLeft: number | null;
   workingDaysLeft: number | null;
   coverage: ScreenCoverage | null;
