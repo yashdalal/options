@@ -57,6 +57,7 @@ const REPORT_CONCURRENCY = 2;
 const REPORT_COLUMN_COUNT = 10;
 const MAX_SELECTED_COMPANIES = 30;
 const EMPTY_NAME_BY_UNDERLYING: Record<string, string> = {};
+const SPAN_BASKET_SEGMENTS = new Set(["nse_fo", "bse_fo"]);
 
 type ReportSortKey = "company" | "spread" | "return";
 type ReportSortDir = "asc" | "desc";
@@ -1364,7 +1365,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
             ) : (
               sortedRows.map((row, index) => {
                 const inBasket = isCandidateInBasket(basketLegs, row);
-                const nseOnly = row.exchangeSegment.toLowerCase() === "nse_fo";
+                const supportedSegment = SPAN_BASKET_SEGMENTS.has(
+                  row.exchangeSegment.toLowerCase(),
+                );
                 const expanded = expandedRowIds.has(row.id);
                 const rowBackgroundClass = inBasket
                   ? "bg-emerald-50"
@@ -1393,10 +1396,10 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                         setBasketLegs(upsertBasketLeg(basketLegs, row));
                         setBasketOpen(true);
                       }}
-                      disabled={!nseOnly}
+                      disabled={!supportedSegment}
                       title={
-                        !nseOnly
-                          ? "Only NSE F&O legs can be added to the SPAN basket"
+                        !supportedSegment
+                          ? "This F&O segment is not supported by the SPAN basket"
                           : inBasket
                             ? "Remove from basket"
                             : "Add sell leg to basket"

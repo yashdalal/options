@@ -8,6 +8,7 @@ import { parseSpnStream } from "@/server/span/parse";
 import {
   basketLegsToSpanPositions,
   deliveryMarginWarningFor,
+  mapRawPositionsToSpan,
 } from "@/server/span/positions";
 
 const fixturePath = path.join(
@@ -130,7 +131,7 @@ describe("span parse + engine", () => {
 });
 
 describe("calculateSingleLegSpanMargins", () => {
-  it("returns per-leg SPAN totals and surfaces unsupported legs", async () => {
+  it("returns per-leg SPAN totals for NSE and BSE contracts", async () => {
     const { writeSpanSnapshot, resetSpanStoreForTests } = await import(
       "@/server/span/store"
     );
@@ -173,8 +174,8 @@ describe("calculateSingleLegSpanMargins", () => {
     expect(results[0].spanMargin).toBeGreaterThan(0);
     expect(results[0].error).toBeUndefined();
     expect(results[1].id).toBe("bse");
-    expect(results[1].spanMargin).toBeNull();
-    expect(results[1].error).toMatch(/nse_fo/i);
+    expect(results[1].spanMargin).toBe(results[0].spanMargin);
+    expect(results[1].error).toBeUndefined();
     resetSpanStoreForTests();
   });
 });
@@ -196,21 +197,74 @@ describe("basket leg mapping", () => {
     expect(positions[0].quantity).toBe(-100);
   });
 
-  it("rejects bse_fo legs", () => {
+  it("maps bse_fo legs", () => {
+    const positions = basketLegsToSpanPositions([
+      {
+        exchangeSegment: "bse_fo",
+        underlying: "SENSEX",
+        expiryIso: "2026-07-30",
+        strike: 80000,
+        optionType: "CALL",
+        side: "SELL",
+        lots: 1,
+        lotSize: 20,
+      },
+    ]);
+    expect(positions).toEqual([
+      {
+        underlying: "SENSEX",
+        instrumentType: "OPT",
+        optionType: "CALL",
+        expiryIso: "2026-07-30",
+        strike: 80000,
+        quantity: -20,
+      },
+    ]);
+  });
+
+  it("rejects unsupported segments", () => {
     expect(() =>
       basketLegsToSpanPositions([
         {
-          exchangeSegment: "bse_fo",
-          underlying: "TESTCO",
+          exchangeSegment: "mcx_fo",
+          underlying: "GOLD",
           expiryIso: "2026-07-28",
-          strike: 100,
+          strike: 100000,
           optionType: "CALL",
           side: "SELL",
           lots: 1,
-          lotSize: 50,
+          lotSize: 1,
         },
       ]),
-    ).toThrow(/nse_fo/i);
+    ).toThrow(/unsupported f&o segment/i);
+  });
+
+  it("maps Kotak BSE positions into the SPAN portfolio", () => {
+    const positions = mapRawPositionsToSpan(
+      [
+        {
+          exSeg: "bse_fo",
+          sym: "SENSEX",
+          trdSym: "SENSEX26AUG80000CE",
+          optTp: "CE",
+          stkPrc: "80000",
+          expDt: "2026-08-06",
+          lotSz: "20",
+          qty: "-40",
+        },
+      ],
+      undefined,
+    );
+    expect(positions).toEqual([
+      {
+        underlying: "SENSEX",
+        instrumentType: "OPT",
+        optionType: "CALL",
+        expiryIso: "2026-08-06",
+        strike: 80000,
+        quantity: -40,
+      },
+    ]);
   });
 });
 
@@ -242,20 +296,23 @@ describe("deliveryMarginWarningFor", () => {
     );
   });
 
-  it("skips index underlyings", () => {
-    const warning = deliveryMarginWarningFor(
-      [
-        {
-          underlying: "NIFTY",
-          instrumentType: "OPT",
-          optionType: "CALL",
-          expiryIso: "2026-07-28",
-          strike: 25000,
-          quantity: -65,
-        },
-      ],
-      new Date("2026-07-25T00:00:00.000Z"),
-    );
-    expect(warning).toBeNull();
-  });
+  it.each(["NIFTY", "BANKEX", "SENSEX", "SENSEX50"])(
+    "skips %s index underlyings",
+    (underlying) => {
+      const warning = deliveryMarginWarningFor(
+        [
+          {
+            underlying,
+            instrumentType: "OPT",
+            optionType: "CALL",
+            expiryIso: "2026-07-28",
+            strike: 25000,
+            quantity: -65,
+          },
+        ],
+        new Date("2026-07-25T00:00:00.000Z"),
+      );
+      expect(warning).toBeNull();
+    },
+  );
 });

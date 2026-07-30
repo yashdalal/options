@@ -1,4 +1,4 @@
-# NSE SPAN basket margin
+# NSE Clearing SPAN basket margin
 
 Portfolio-aware F&O margin for multi-leg baskets using NSE Clearing SPAN risk-parameter files plus (optional) one Kotak account’s open positions.
 
@@ -49,7 +49,7 @@ Omit `accountId` for empty-book basket margin only.
 
 - Exchange-style estimate — Kotak may add broker buffers
 - **Delivery margins near expiry are not modeled.** Stock legs/positions within ~5 calendar days of expiry set `deliveryMarginWarning`
-- NSE F&O only (`nse_fo`). BSE legs/positions fail visibly
+- NSE and BSE equity F&O contracts present in the NSE Clearing snapshot are supported
 - Unmapped contracts fail visibly — never dropped silently
 - Failed SPAN fetch never serves a stale snapshot as recovery
 

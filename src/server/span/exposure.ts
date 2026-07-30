@@ -4,6 +4,9 @@ const INDEX_SYMBOLS = new Set([
   "FINNIFTY",
   "MIDCPNIFTY",
   "NIFTYNXT50",
+  "BANKEX",
+  "SENSEX",
+  "SENSEX50",
 ]);
 
 export const EXPOSURE_SOURCE = "nse_default_rates" as const;
