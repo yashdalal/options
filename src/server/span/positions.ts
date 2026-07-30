@@ -13,6 +13,8 @@ import { SpanError } from "./errors";
 import { isIndexUnderlying } from "./exposure";
 import type { SpanPosition } from "./types";
 
+const SPAN_FO_SEGMENTS = new Set(["nse_fo", "bse_fo"]);
+
 function toNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -67,14 +69,7 @@ export function mapRawPositionsToSpan(
 
   for (const raw of rawPositions) {
     const exchangeSegment = String(raw.exSeg ?? "").toLowerCase();
-    if (exchangeSegment === "bse_fo") {
-      throw new SpanError(
-        "BSE F&O positions are not supported for SPAN margin in v1",
-        422,
-        "span_bse_unsupported",
-      );
-    }
-    if (exchangeSegment !== "nse_fo") {
+    if (!SPAN_FO_SEGMENTS.has(exchangeSegment)) {
       continue;
     }
 
@@ -167,11 +162,11 @@ export type BasketLegInput = {
 
 export function basketLegsToSpanPositions(legs: BasketLegInput[]): SpanPosition[] {
   return legs.map((leg) => {
-    if (leg.exchangeSegment.toLowerCase() !== "nse_fo") {
+    if (!SPAN_FO_SEGMENTS.has(leg.exchangeSegment.toLowerCase())) {
       throw new SpanError(
-        `Only nse_fo legs are supported (got ${leg.exchangeSegment})`,
+        `Unsupported F&O segment: ${leg.exchangeSegment}`,
         422,
-        "span_bse_unsupported",
+        "span_segment_unsupported",
       );
     }
     if (!(leg.lots > 0) || !(leg.lotSize > 0)) {

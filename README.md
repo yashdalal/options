@@ -27,7 +27,7 @@ Read-only against the broker: the app fetches positions, quotes, scrip master, a
 
 ### Basket margin
 
-Add screener rows to a tray and compute NSE SPAN + ELM for the whole multi-leg book, optionally as incremental ΔM against one Kotak account's existing positions. SPAN parameter files are downloaded from NSE archives and cached. See [docs/span-margin.md](docs/span-margin.md).
+Add screener rows to a tray and compute NSE Clearing SPAN + ELM for the whole multi-leg book, optionally as incremental ΔM against one Kotak account's existing positions. SPAN parameter files are downloaded from NSE archives and cached. See [docs/span-margin.md](docs/span-margin.md).
 
 ## Prerequisites
 
