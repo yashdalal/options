@@ -1366,15 +1366,18 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 const inBasket = isCandidateInBasket(basketLegs, row);
                 const nseOnly = row.exchangeSegment.toLowerCase() === "nse_fo";
                 const expanded = expandedRowIds.has(row.id);
+                const rowBackgroundClass = inBasket
+                  ? "bg-emerald-50"
+                  : index % 2 === 0
+                    ? "bg-white"
+                    : "bg-zinc-50";
                 return (
                 <Fragment key={row.id}>
                 <tr
-                  className={`${index % 2 === 0 ? "bg-white" : "bg-zinc-50"} font-medium ${optionSideTextClass(row.optionType)}`}
+                  className={`${rowBackgroundClass} font-medium ${optionSideTextClass(row.optionType)}`}
                 >
                   <td
-                    className={`sticky left-0 z-10 border-b border-zinc-100 px-3 py-2 whitespace-nowrap shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08)] ${
-                      index % 2 === 0 ? "bg-white" : "bg-zinc-50"
-                    }`}
+                    className={`sticky left-0 z-10 border-b border-zinc-100 px-3 py-2 whitespace-nowrap shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08)] ${rowBackgroundClass}`}
                   >
                     <button
                       type="button"
