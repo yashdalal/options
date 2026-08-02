@@ -46,6 +46,10 @@ npm run dev
 
 Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and connect each account with its own Connect button as you generate a fresh TOTP. Sessions are saved as you go and last 12 hours. The report opens only once all three accounts are connected; if one later expires, the other two are kept and you reconnect just that account.
 
+### Local demo mode
+
+To exercise the UI without Kotak credentials or upstream APIs, set `DEMO_MODE=1` in `.env.local` and run `npm run dev`. Auth auto-connects all three accounts, adapters serve synthetic positions/quotes/scrip/margin/SPAN/ranges, and a banner marks the session as demo. Demo mode is ignored when `NODE_ENV=production`.
+
 ## Configuration
 
 | Variable | Purpose |
@@ -59,6 +63,7 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and connect each account wit
 | `HIGHLIGHT_DEFAULT` | Default highlight threshold in % |
 | `SESSION_COOKIE_NAME` | Session cookie name |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Session and SPAN cache store. `KV_REST_API_URL` / `KV_REST_API_TOKEN` also accepted |
+| `DEMO_MODE` | Set to `1` locally to bypass TOTP and use synthetic data (disabled in production) |
 
 `<ACCOUNT>` is `PRAKASH`, `GOPA`, or `HUF`.
 

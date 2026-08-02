@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  demoFetchQuotes,
+  demoFetchSpotQuotes,
+} from "@/server/demo/adapters/quotes";
+import { isDemoMode } from "@/server/demo/mode";
 import { kotakFetch } from "./client";
 import { detectBrokerFailure } from "./broker-response";
 import { KotakApiError } from "./errors";
@@ -340,6 +345,10 @@ export async function fetchQuotes(
   instruments: InstrumentRef[],
   batchSize = 50,
 ): Promise<InstrumentQuote[]> {
+  if (isDemoMode()) {
+    return demoFetchQuotes(session, instruments, batchSize);
+  }
+
   const unique = new Map<string, InstrumentRef>();
   for (const item of instruments) {
     unique.set(`${item.exchangeSegment}:${item.instrumentToken}`, item);
@@ -364,6 +373,10 @@ export async function fetchSpotQuotes(
   instruments: InstrumentRef[],
   batchSize = 50,
 ): Promise<SpotQuote[]> {
+  if (isDemoMode()) {
+    return demoFetchSpotQuotes(session, instruments, batchSize);
+  }
+
   const quotes = await fetchQuotes(session, instruments, batchSize);
   return quotes.map((quote) => ({
     instrumentToken: quote.instrumentToken,

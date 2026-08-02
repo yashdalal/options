@@ -1,3 +1,5 @@
+import { demoFetchUnderlyingPriceRanges } from "@/server/demo/adapters/yahoo-history";
+import { isDemoMode } from "@/server/demo/mode";
 import { logWarn } from "../logging";
 
 export type DailyBar = {
@@ -183,6 +185,10 @@ export async function fetchDailyBars(nseSymbol: string): Promise<DailyBar[]> {
 export async function fetchUnderlyingPriceRanges(
   nseSymbol: string,
 ): Promise<UnderlyingPriceRanges> {
+  if (isDemoMode()) {
+    return demoFetchUnderlyingPriceRanges(nseSymbol);
+  }
+
   const bars = await fetchDailyBars(nseSymbol);
   return {
     oneMonth: computeRange(bars, ONE_MONTH_BARS),

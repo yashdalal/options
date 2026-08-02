@@ -14,6 +14,7 @@ type AuthStatus = {
   status: string;
   highlightDefault: number;
   configured?: boolean;
+  demo?: boolean;
   accounts?: AccountAuthStatus[];
 };
 
@@ -111,6 +112,14 @@ export function AppShell() {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-zinc-100">
+      {auth.demo ? (
+        <div
+          className="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-sm text-amber-950"
+          role="status"
+        >
+          Demo mode — synthetic data, not live broker
+        </div>
+      ) : null}
       <header className="shrink-0 border-b border-zinc-200 bg-white">
         <div className="mx-auto flex h-12 w-full max-w-7xl items-stretch justify-between gap-6 px-4 sm:px-6">
           <nav

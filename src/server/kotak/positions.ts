@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { demoFetchPositions } from "@/server/demo/adapters/positions";
+import { isDemoMode } from "@/server/demo/mode";
 import { kotakFetch } from "./client";
 import { detectBrokerFailure } from "./broker-response";
 import { KotakApiError } from "./errors";
@@ -89,6 +91,10 @@ export async function fetchPositions(
   requestId?: string,
   accountId?: string,
 ): Promise<RawPosition[]> {
+  if (isDemoMode()) {
+    return demoFetchPositions(session, requestId, accountId);
+  }
+
   const startedAt = Date.now();
   const host = new URL(session.baseUrl).hostname;
   let payload: unknown;

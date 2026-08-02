@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { filterExpiriesWithinMonthsAhead } from "@/lib/expiry-horizon";
+import { demoLoadScripMasterRegistry } from "@/server/demo/adapters/scrip-master";
+import { isDemoMode } from "@/server/demo/mode";
 import { kotakFetch } from "./client";
 import { KotakApiError } from "./errors";
 import type { TradeSessionCredentials } from "./auth";
@@ -479,6 +481,10 @@ function registryIncludesSegments(
 export async function loadScripMasterRegistry(
   session: TradeSessionCredentials,
 ): Promise<ScripMasterRegistry> {
+  if (isDemoMode()) {
+    return demoLoadScripMasterRegistry(session);
+  }
+
   const asOfDate = todayIstDate();
   const memory = globalStore.__scripMasterRegistryCache;
   if (

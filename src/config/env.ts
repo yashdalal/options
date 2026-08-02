@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isDemoMode } from "@/server/demo/mode";
 import {
   ACCOUNT_DEFINITIONS,
   type AccountDefinition,
@@ -87,6 +88,21 @@ function hasAccountCredentials(definition: AccountDefinition): boolean {
 
 let cached: AppEnv | null = null;
 
+function demoAccountCredentials(definition: AccountDefinition): AccountCredentials {
+  return {
+    id: definition.id,
+    label: definition.label,
+    accessToken: `demo-access-${definition.id}`,
+    mobileNumber: "+919999999999",
+    ucc: `DEMO${definition.id.toUpperCase()}`,
+    mpin: "000000",
+  };
+}
+
+export function resetEnvCacheForTests(): void {
+  cached = null;
+}
+
 export function getEnv(): AppEnv {
   if (cached) {
     return cached;
@@ -98,6 +114,14 @@ export function getEnv(): AppEnv {
       .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
       .join("; ");
     throw new Error(`Invalid environment configuration: ${details}`);
+  }
+
+  if (isDemoMode()) {
+    cached = {
+      accounts: ACCOUNT_DEFINITIONS.map(demoAccountCredentials),
+      ...shared.data,
+    };
+    return cached;
   }
 
   cached = {
@@ -133,5 +157,8 @@ export function getSessionCookieName(): string {
 }
 
 export function hasKotakCredentials(): boolean {
+  if (isDemoMode()) {
+    return true;
+  }
   return ACCOUNT_DEFINITIONS.every(hasAccountCredentials);
 }

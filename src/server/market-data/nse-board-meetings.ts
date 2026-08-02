@@ -1,3 +1,5 @@
+import { demoGetNextBoardMeeting } from "@/server/demo/adapters/board-meetings";
+import { isDemoMode } from "@/server/demo/mode";
 import { logWarn } from "../logging";
 
 export type BoardMeeting = {
@@ -414,6 +416,10 @@ async function loadBoardMeetingCalendar(): Promise<Map<string, BoardMeeting>> {
 export async function getNextBoardMeeting(
   nseSymbol: string,
 ): Promise<BoardMeeting | null> {
+  if (isDemoMode()) {
+    return demoGetNextBoardMeeting(nseSymbol);
+  }
+
   const symbol = nseSymbol.trim().toUpperCase();
   if (!symbol) {
     return null;

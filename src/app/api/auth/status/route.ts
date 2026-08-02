@@ -4,14 +4,39 @@ import {
   ACCOUNT_DEFINITIONS,
 } from "@/config/accounts";
 import { getHighlightDefault, getSessionCookieName, hasKotakCredentials } from "@/config/env";
+import { isDemoMode } from "@/server/demo/mode";
+import { ensureDemoSession } from "@/server/demo/session";
 import {
   getSessionState,
   listPublicAccountStatuses,
 } from "@/server/session";
 
+function setSessionCookie(
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+  sessionId: string,
+): void {
+  cookieStore.set(getSessionCookieName(), sessionId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 12,
+  });
+}
+
 export async function GET(): Promise<Response> {
   const cookieStore = await cookies();
-  const sessionId = cookieStore.get(getSessionCookieName())?.value;
+  const demo = isDemoMode();
+  let sessionId = cookieStore.get(getSessionCookieName())?.value;
+
+  if (demo) {
+    const ensured = await ensureDemoSession(sessionId);
+    if (ensured !== sessionId) {
+      setSessionCookie(cookieStore, ensured);
+      sessionId = ensured;
+    }
+  }
+
   const state = await getSessionState(sessionId);
   const accounts =
     state.status === "logged_out"
@@ -39,6 +64,7 @@ export async function GET(): Promise<Response> {
           : "logged_out",
     highlightDefault: getHighlightDefault(),
     configured: hasKotakCredentials(),
+    demo,
     accounts,
   });
 }

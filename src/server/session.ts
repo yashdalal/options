@@ -4,6 +4,8 @@ import {
   type AccountId,
 } from "@/config/accounts";
 import { getAccountCredentials, listAccountCredentials } from "@/config/env";
+import { isDemoMode } from "@/server/demo/mode";
+import { establishDemoSession } from "@/server/demo/session";
 import {
   loginWithTotp,
   logoutSession,
@@ -167,6 +169,10 @@ export async function establishSession(
   totps: Partial<Record<AccountId, string>>,
   existingSessionId?: string,
 ): Promise<EstablishSessionResult> {
+  if (isDemoMode()) {
+    return establishDemoSession(totps, existingSessionId);
+  }
+
   const existing = existingSessionId
     ? await readSession(existingSessionId)
     : null;
@@ -248,7 +254,7 @@ export async function clearSession(sessionId: string | undefined): Promise<void>
   }
 
   const existing = await readSession(sessionId);
-  if (existing) {
+  if (existing && !isDemoMode()) {
     await Promise.all(
       listAccountCredentials().map(async (account) => {
         const slot = existing.accounts[account.id];

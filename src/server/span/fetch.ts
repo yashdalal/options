@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
+import { demoRefreshSpanSnapshot } from "@/server/demo/adapters/span";
+import { isDemoMode } from "@/server/demo/mode";
 import { logInfo, logWarn } from "../logging";
 import { SpanError } from "./errors";
 import { parseSpnStream } from "./parse";
@@ -170,6 +172,10 @@ function extractSpn(zipPath: string, destDir: string): string {
 export async function refreshSpanSnapshot(options?: {
   force?: boolean;
 }): Promise<SpanSnapshotMeta> {
+  if (isDemoMode()) {
+    return demoRefreshSpanSnapshot(options);
+  }
+
   const latest = await resolveLatestSpanFile();
   logInfo("Refreshing SPAN snapshot", {
     date: latest.date,

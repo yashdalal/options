@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { demoCheckMargin } from "@/server/demo/adapters/margin";
+import { isDemoMode } from "@/server/demo/mode";
 import { kotakFetch } from "./client";
 import { KotakApiError } from "./errors";
 import type { TradeSessionCredentials } from "./auth";
@@ -74,6 +76,10 @@ export async function checkMargin(
   session: TradeSessionCredentials,
   input: CheckMarginInput,
 ): Promise<CheckMarginResult> {
+  if (isDemoMode()) {
+    return demoCheckMargin(session, input);
+  }
+
   const limiter = getKotakRateLimiter();
   return limiter.schedule(async () => {
     const jData: Record<string, string> = {

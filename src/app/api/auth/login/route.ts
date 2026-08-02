@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ACCOUNT_IDS } from "@/config/accounts";
 import { getSessionCookieName, hasKotakCredentials } from "@/config/env";
+import { isDemoMode } from "@/server/demo/mode";
 import { establishSession } from "@/server/session";
 
 const totpSchema = z.string().regex(/^\d{6}$/);
@@ -22,11 +23,32 @@ const bodySchema = z.object({
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const demo = isDemoMode();
     if (!hasKotakCredentials()) {
       return NextResponse.json(
         { error: "Server is missing Kotak credentials in .env.local" },
         { status: 500 },
       );
+    }
+
+    const cookieStore = await cookies();
+    const existingSessionId = cookieStore.get(getSessionCookieName())?.value;
+
+    if (demo) {
+      const result = await establishSession({}, existingSessionId);
+      cookieStore.set(getSessionCookieName(), result.sessionId, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 12,
+      });
+      return NextResponse.json({
+        status: result.ready ? "authenticated" : "partial",
+        ready: result.ready,
+        accounts: result.accounts,
+        demo: true,
+      });
     }
 
     const json = await request.json();
@@ -38,8 +60,6 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const cookieStore = await cookies();
-    const existingSessionId = cookieStore.get(getSessionCookieName())?.value;
     const result = await establishSession(
       parsed.data.totps,
       existingSessionId,
