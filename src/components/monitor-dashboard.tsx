@@ -160,7 +160,6 @@ export function MonitorDashboard({
   const [thresholdInput, setThresholdInput] = useState(() =>
     String(readStoredThreshold(highlightDefault)),
   );
-  const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
   const [showNearOnly, setShowNearOnly] = useState(() => readStoredShowNearOnly());
   const [companyQuery, setCompanyQuery] = useState("");
@@ -210,7 +209,6 @@ export function MonitorDashboard({
       setSnapshot(payload);
       setStale(false);
       setSelectedExpiry((current) => current ?? payload.groups[0]?.expiryIso ?? null);
-      setNextRefreshAt(Date.now() + 60_000);
     } catch {
       setError("Refresh failed. Showing last successful snapshot if available.");
       setStale(true);
@@ -379,7 +377,6 @@ export function MonitorDashboard({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-        <span>Report {snapshot?.reportDate ?? "—"}</span>
         <span>
           Positions: {snapshot?.optionPositionCount ?? 0} · Prices:{" "}
           {snapshot?.downloadedPriceCount ?? 0}
@@ -392,17 +389,6 @@ export function MonitorDashboard({
             {summary.accountLabel}: {summary.optionPositionCount}
           </span>
         ))}
-        <span>
-          Updated:{" "}
-          {snapshot
-            ? new Date(snapshot.generatedAt).toLocaleString("en-IN", {
-                timeZone: "Asia/Kolkata",
-              })
-            : "—"}
-        </span>
-        {autoRefresh && active && pageVisible && nextRefreshAt ? (
-          <span>Next refresh around {new Date(nextRefreshAt).toLocaleTimeString("en-IN")}</span>
-        ) : null}
       </div>
 
       <div className="flex flex-col gap-2">

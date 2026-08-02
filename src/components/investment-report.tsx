@@ -750,18 +750,16 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       <header className="relative z-40 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold text-zinc-900">Options Screener</h1>
-            <p className="text-sm text-zinc-600">
-              Screen a short company list and list every option that meets min spread and min
-              annualized return.{" "}
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="text-xl font-semibold text-zinc-900">Options Screener</h1>
               <button
                 type="button"
                 onClick={() => setHelpOpen(true)}
-                className="font-medium text-zinc-800 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+                className="text-sm font-medium text-zinc-800 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
               >
                 How it works
               </button>
-            </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {basketLegs.length > 0 && !basketOpen ? (

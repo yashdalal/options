@@ -26,11 +26,23 @@ const EMPTY_ACCOUNTS: AccountAuthStatus[] = ACCOUNT_DEFINITIONS.map((definition)
   status: "disconnected" as const,
 }));
 
+function formatTodayIst(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
+    .format(now)
+    .replace(/ /g, "-");
+}
+
 export function AppShell() {
   const [ready, setReady] = useState(false);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<AppTab>("monitor");
+  const [todayIst, setTodayIst] = useState(() => formatTodayIst());
 
   const loadStatus = useCallback(async () => {
     try {
@@ -56,6 +68,13 @@ export function AppShell() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional mount fetch
     void loadStatus();
   }, [loadStatus]);
+
+  useEffect(() => {
+    const syncDate = () => setTodayIst(formatTodayIst());
+    syncDate();
+    const timer = window.setInterval(syncDate, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -153,7 +172,14 @@ export function AppShell() {
               );
             })}
           </nav>
-          <div className="flex shrink-0 items-center">
+          <div className="flex shrink-0 items-center gap-4">
+            <time
+              dateTime={todayIst}
+              className="text-sm tabular-nums text-zinc-500"
+              title="Today (IST)"
+            >
+              {todayIst}
+            </time>
             <button
               type="button"
               onClick={() => void logout()}
