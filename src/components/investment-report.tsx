@@ -96,6 +96,16 @@ function formatBoardMeetingDate(dateIso: string): string {
   return formatExpiryLabel(dateIso);
 }
 
+function meetingTooltip(
+  meeting: { purpose: string; description: string } | null,
+): string | undefined {
+  if (!meeting) {
+    return undefined;
+  }
+  const tooltip = [meeting.purpose, meeting.description].filter(Boolean).join(" — ");
+  return tooltip || undefined;
+}
+
 function BoardMeetingCell({
   meeting,
   error,
@@ -110,14 +120,34 @@ function BoardMeetingCell({
       </span>
     );
   }
-  if (!meeting) {
+  if (!meeting || (!meeting.next && !meeting.last)) {
     return <span className="text-zinc-400">—</span>;
   }
-  const tooltip = [meeting.purpose, meeting.description].filter(Boolean).join(" — ");
   return (
-    <span className="tabular-nums" title={tooltip || undefined}>
-      {formatBoardMeetingDate(meeting.dateIso)}
-    </span>
+    <div className="space-y-0.5 text-sm">
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+          Next
+        </span>
+        <span
+          className={`tabular-nums ${meeting.next ? "text-zinc-900" : "text-zinc-400"}`}
+          title={meetingTooltip(meeting.next)}
+        >
+          {meeting.next ? formatBoardMeetingDate(meeting.next.dateIso) : "—"}
+        </span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+          Last
+        </span>
+        <span
+          className={`tabular-nums ${meeting.last ? "text-zinc-900" : "text-zinc-400"}`}
+          title={meetingTooltip(meeting.last)}
+        >
+          {meeting.last ? formatBoardMeetingDate(meeting.last.dateIso) : "—"}
+        </span>
+      </div>
+    </div>
   );
 }
 

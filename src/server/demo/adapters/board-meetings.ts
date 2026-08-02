@@ -1,4 +1,4 @@
-import type { BoardMeeting } from "@/server/market-data/nse-board-meetings";
+import type { BoardMeetingInfo } from "@/domain/types";
 
 function indiaTodayIso(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -19,30 +19,62 @@ function addDaysIso(isoDate: string, days: number): string {
   return `${y}-${m}-${d}`;
 }
 
-const DEMO_MEETINGS: Record<string, Omit<BoardMeeting, "dateIso"> & { daysAhead: number }> = {
+type DemoMeetingSpec = {
+  daysAhead?: number;
+  daysAgo?: number;
+  purpose: string;
+  description: string;
+};
+
+const DEMO_MEETINGS: Record<string, DemoMeetingSpec> = {
   SBIN: {
     daysAhead: 18,
+    daysAgo: 72,
     purpose: "Financial Results",
     description: "Demo board meeting for quarterly results",
   },
   BOSCHLTD: {
     daysAhead: 40,
+    daysAgo: 55,
     purpose: "Board Meeting",
     description: "Demo corporate action calendar entry",
   },
+  ASHOKLEY: {
+    daysAgo: 48,
+    purpose: "Financial Results",
+    description: "Demo prior-quarter results meeting (next not announced)",
+  },
+  "M&M": {
+    daysAgo: 90,
+    purpose: "Financial Results",
+    description: "Demo older-quarter meeting while next date is pending",
+  },
 };
 
-export async function demoGetNextBoardMeeting(
+export async function demoGetBoardMeetings(
   nseSymbol: string,
-): Promise<BoardMeeting | null> {
+): Promise<BoardMeetingInfo> {
   const symbol = nseSymbol.trim().toUpperCase();
   const entry = DEMO_MEETINGS[symbol];
   if (!entry) {
-    return null;
+    return { next: null, last: null };
   }
-  return {
-    dateIso: addDaysIso(indiaTodayIso(), entry.daysAhead),
-    purpose: entry.purpose,
-    description: entry.description,
-  };
+  const today = indiaTodayIso();
+  const next =
+    entry.daysAhead === undefined
+      ? null
+      : {
+          dateIso: addDaysIso(today, entry.daysAhead),
+          purpose: entry.purpose,
+          description: entry.description,
+        };
+  const last =
+    entry.daysAgo === undefined
+      ? null
+      : {
+          dateIso: addDaysIso(today, -entry.daysAgo),
+          purpose: entry.purpose,
+          description: entry.description,
+        };
+  return { next, last };
 }

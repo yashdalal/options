@@ -25,7 +25,7 @@ import {
   loadScripMasterRegistry,
   resolveCashInstrument,
 } from "./kotak/scrip-master";
-import { getNextBoardMeeting } from "./market-data/nse-board-meetings";
+import { getBoardMeetingsForSymbol } from "./market-data/nse-board-meetings";
 import {
   emptyPriceRanges,
   fetchUnderlyingPriceRanges,
@@ -39,7 +39,7 @@ async function loadBoardMeeting(company: string): Promise<{
   boardMeetingError: string | null;
 }> {
   try {
-    const meeting = await getNextBoardMeeting(company);
+    const meeting = await getBoardMeetingsForSymbol(company);
     return { boardMeeting: meeting, boardMeetingError: null };
   } catch (error) {
     return {
