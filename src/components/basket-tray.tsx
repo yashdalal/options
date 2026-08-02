@@ -431,62 +431,65 @@ export function BasketTray({
 
   const legsList = (
     <ul className="min-h-0 flex-1 divide-y divide-zinc-100 overflow-y-auto text-sm">
-      {legs.map((leg) => (
-        <li
-          key={leg.key}
-          className="flex items-center gap-2 px-3 py-2"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="truncate font-medium text-zinc-900">
-              {leg.underlying} {leg.strike}{" "}
-              {leg.optionType === "CALL" ? "CE" : "PE"}
+      {legs.map((leg) => {
+        const contractLabel = `${leg.underlying} ${leg.strike} ${
+          leg.optionType === "CALL" ? "CE" : "PE"
+        }`;
+        return (
+          <li key={leg.key} className="flex flex-col gap-1.5 px-3 py-2.5">
+            <div className="min-w-0">
+              <div className="break-words font-medium text-zinc-900">
+                {contractLabel}
+              </div>
+              <div className="text-xs tabular-nums text-zinc-500">
+                {formatRupees(leg.premium)}
+              </div>
             </div>
-            <div className="text-xs tabular-nums text-zinc-500">
-              {formatRupees(leg.premium)}
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={leg.side}
+                onChange={(event) => {
+                  const side = event.target.value as "BUY" | "SELL";
+                  onChangeLegs(
+                    legs.map((row) =>
+                      row.key === leg.key ? { ...row, side } : row,
+                    ),
+                  );
+                }}
+                className="rounded border border-zinc-300 bg-white px-1.5 py-1 text-sm"
+              >
+                <option value="SELL">SELL</option>
+                <option value="BUY">BUY</option>
+              </select>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={leg.lots}
+                onChange={(event) => {
+                  const lots = Math.max(1, Number(event.target.value) || 1);
+                  onChangeLegs(
+                    legs.map((row) =>
+                      row.key === leg.key ? { ...row, lots } : row,
+                    ),
+                  );
+                }}
+                className="w-14 rounded border border-zinc-300 px-1.5 py-1 text-sm tabular-nums"
+                aria-label="Lots"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  onChangeLegs(legs.filter((row) => row.key !== leg.key));
+                }}
+                className="shrink-0 text-sm font-medium text-rose-700 hover:underline"
+              >
+                Remove
+              </button>
             </div>
-          </div>
-          <select
-            value={leg.side}
-            onChange={(event) => {
-              const side = event.target.value as "BUY" | "SELL";
-              onChangeLegs(
-                legs.map((row) =>
-                  row.key === leg.key ? { ...row, side } : row,
-                ),
-              );
-            }}
-            className="rounded border border-zinc-300 bg-white px-1.5 py-1 text-sm"
-          >
-            <option value="SELL">SELL</option>
-            <option value="BUY">BUY</option>
-          </select>
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={leg.lots}
-            onChange={(event) => {
-              const lots = Math.max(1, Number(event.target.value) || 1);
-              onChangeLegs(
-                legs.map((row) =>
-                  row.key === leg.key ? { ...row, lots } : row,
-                ),
-              );
-            }}
-            className="w-14 rounded border border-zinc-300 px-1.5 py-1 text-sm tabular-nums"
-            aria-label="Lots"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              onChangeLegs(legs.filter((row) => row.key !== leg.key));
-            }}
-            className="shrink-0 text-sm font-medium text-rose-700 hover:underline"
-          >
-            Remove
-          </button>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ul>
   );
 
