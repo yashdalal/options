@@ -786,16 +786,16 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     return () => window.removeEventListener("scroll", closePicker, true);
   }, [companyPickerOpen]);
 
-  const contextRowRef = useRef<HTMLTableCellElement | null>(null);
-  const [contextHeight, setContextHeight] = useState(56);
+  const stickyChromeRef = useRef<HTMLDivElement | null>(null);
+  const [stickyChromeHeight, setStickyChromeHeight] = useState(88);
 
   useEffect(() => {
-    const node = contextRowRef.current;
+    const node = stickyChromeRef.current;
     if (!node || typeof ResizeObserver === "undefined") {
       return;
     }
     const update = () => {
-      setContextHeight(Math.ceil(node.getBoundingClientRect().height));
+      setStickyChromeHeight(Math.ceil(node.getBoundingClientRect().height));
     };
     update();
     const observer = new ResizeObserver(update);
@@ -1230,8 +1230,92 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         </div>
       ) : null}
 
-      <div className="sticky top-0 z-40 -mx-4 border-b border-zinc-200 bg-zinc-100/95 px-4 py-2 backdrop-blur-sm sm:-mx-6 sm:px-6">
+      <div
+        ref={stickyChromeRef}
+        className="sticky top-0 z-40 -mx-4 space-y-2 bg-zinc-100/95 px-4 py-2 backdrop-blur-sm sm:-mx-6 sm:px-6"
+      >
         <p className="text-sm text-zinc-600">{statusMessage}</p>
+        <div
+          className="rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 shadow-sm"
+          aria-live="polite"
+        >
+          <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Expiry date
+              </span>
+              <span className="text-sm font-semibold text-zinc-900">
+                {selectedExpiry ? formatExpiryLabel(selectedExpiry) : "—"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Calendar days
+              </span>
+              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                {daysToExpiry.calendar ?? "—"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Working days
+              </span>
+              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                {daysToExpiry.working ?? "—"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Min spread %
+              </span>
+              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                {formatNumber(appliedSpread, 0)}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Min return % p.a.
+              </span>
+              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                {formatNumber(appliedReturn, 0)}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Processed
+              </span>
+              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                {progress.status === "idle"
+                  ? "—"
+                  : `${progress.processed} / ${progress.eligible}`}
+              </span>
+            </div>
+            {progress.status !== "idle" && progress.failed > 0 ? (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                  Failed
+                </span>
+                <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                  {progress.failed}
+                </span>
+              </div>
+            ) : null}
+            <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                Status
+              </span>
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
+                {running ? (
+                  <span
+                    className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800"
+                    aria-hidden
+                  />
+                ) : null}
+                {statusLabel}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div
@@ -1240,92 +1324,6 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       >
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
-            <tr>
-              <th
-                ref={contextRowRef}
-                colSpan={REPORT_COLUMN_COUNT}
-                scope="colgroup"
-                className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-3 py-2.5 text-left font-normal"
-                aria-live="polite"
-              >
-                <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Expiry date
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900">
-                      {selectedExpiry ? formatExpiryLabel(selectedExpiry) : "—"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Calendar days
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                      {daysToExpiry.calendar ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Working days
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                      {daysToExpiry.working ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Min spread %
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                      {formatNumber(appliedSpread, 0)}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Min return % p.a.
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                      {formatNumber(appliedReturn, 0)}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Processed
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                      {progress.status === "idle"
-                        ? "—"
-                        : `${progress.processed} / ${progress.eligible}`}
-                    </span>
-                  </div>
-                  {progress.status !== "idle" && progress.failed > 0 ? (
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                        Failed
-                      </span>
-                      <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                        {progress.failed}
-                      </span>
-                    </div>
-                  ) : null}
-                  <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
-                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                      Status
-                    </span>
-                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
-                      {running ? (
-                        <span
-                          className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800"
-                          aria-hidden
-                        />
-                      ) : null}
-                      {statusLabel}
-                    </span>
-                  </div>
-                </div>
-              </th>
-            </tr>
             <tr className="text-left text-zinc-700">
               {(
                 [
@@ -1355,7 +1353,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                           : "none"
                         : undefined
                     }
-                    style={{ top: contextHeight }}
+                    style={{ top: stickyChromeHeight }}
                     className={`sticky z-20 border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8] ${
                       stickyAction
                         ? "left-0 z-30 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08),inset_0_-1px_0_#d4d4d8]"
