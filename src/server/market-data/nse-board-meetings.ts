@@ -1,4 +1,5 @@
-import { demoGetNextBoardMeeting } from "@/server/demo/adapters/board-meetings";
+import type { BoardMeetingInfo } from "@/domain/types";
+import { demoGetBoardMeetings } from "@/server/demo/adapters/board-meetings";
 import { isDemoMode } from "@/server/demo/mode";
 import { logWarn } from "../logging";
 
@@ -17,7 +18,7 @@ export type NseBoardMeetingRow = {
 
 type CacheEntry = {
   expiresAt: number;
-  bySymbol: Map<string, BoardMeeting>;
+  bySymbol: Map<string, BoardMeetingInfo>;
 };
 
 type NseEventCalendarRow = {
@@ -35,6 +36,7 @@ type NseCorporateBoardMeetingRow = {
 };
 
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+const LOOKBACK_MONTHS = 6;
 const LOOKAHEAD_MONTHS = 3;
 const NSE_HOME = "https://www.nseindia.com";
 const USER_AGENT =
@@ -56,7 +58,7 @@ const MONTHS: Record<string, number> = {
 };
 
 let calendarCache: CacheEntry | null = null;
-let inFlight: Promise<Map<string, BoardMeeting>> | null = null;
+let inFlight: Promise<Map<string, BoardMeetingInfo>> | null = null;
 
 export class NseBoardMeetingError extends Error {
   constructor(message: string) {
@@ -124,10 +126,11 @@ export function buildNseBoardMeetingFeedUrl(
   path: "event-calendar" | "corporate-board-meetings",
   todayIso: string,
 ): string {
+  const fromIso = addMonthsIso(todayIso, -LOOKBACK_MONTHS);
   const toIso = addMonthsIso(todayIso, LOOKAHEAD_MONTHS);
   const url = new URL(`${NSE_HOME}/api/${path}`);
   url.searchParams.set("index", "equities");
-  url.searchParams.set("from_date", formatNseQueryDate(todayIso));
+  url.searchParams.set("from_date", formatNseQueryDate(fromIso));
   url.searchParams.set("to_date", formatNseQueryDate(toIso));
   return url.toString();
 }
@@ -149,9 +152,20 @@ function purposeRank(purpose: string): number {
   return 3;
 }
 
-function isBetterMeeting(candidate: BoardMeeting, current: BoardMeeting): boolean {
+function isBetterNextMeeting(candidate: BoardMeeting, current: BoardMeeting): boolean {
   if (candidate.dateIso !== current.dateIso) {
     return candidate.dateIso < current.dateIso;
+  }
+  const purposeDelta = purposeRank(candidate.purpose) - purposeRank(current.purpose);
+  if (purposeDelta !== 0) {
+    return purposeDelta < 0;
+  }
+  return candidate.description.length > current.description.length;
+}
+
+function isBetterLastMeeting(candidate: BoardMeeting, current: BoardMeeting): boolean {
+  if (candidate.dateIso !== current.dateIso) {
+    return candidate.dateIso > current.dateIso;
   }
   const purposeDelta = purposeRank(candidate.purpose) - purposeRank(current.purpose);
   if (purposeDelta !== 0) {
@@ -199,9 +213,50 @@ export function buildNextBoardMeetingBySymbol(
       description: (row.description ?? "").trim(),
     };
     const existing = bySymbol.get(symbol);
-    if (!existing || isBetterMeeting(meeting, existing)) {
+    if (!existing || isBetterNextMeeting(meeting, existing)) {
       bySymbol.set(symbol, meeting);
     }
+  }
+  return bySymbol;
+}
+
+export function buildLastBoardMeetingBySymbol(
+  rows: NseBoardMeetingRow[],
+  todayIso = indiaTodayIso(),
+): Map<string, BoardMeeting> {
+  const bySymbol = new Map<string, BoardMeeting>();
+  for (const row of rows) {
+    const symbol = row.symbol?.trim().toUpperCase();
+    const dateIso = row.date ? parseNseEventDate(row.date) : null;
+    if (!symbol || !dateIso || dateIso >= todayIso) {
+      continue;
+    }
+    const meeting: BoardMeeting = {
+      dateIso,
+      purpose: (row.purpose ?? "").trim() || "Board meeting",
+      description: (row.description ?? "").trim(),
+    };
+    const existing = bySymbol.get(symbol);
+    if (!existing || isBetterLastMeeting(meeting, existing)) {
+      bySymbol.set(symbol, meeting);
+    }
+  }
+  return bySymbol;
+}
+
+export function buildBoardMeetingsBySymbol(
+  rows: NseBoardMeetingRow[],
+  todayIso = indiaTodayIso(),
+): Map<string, BoardMeetingInfo> {
+  const nextBySymbol = buildNextBoardMeetingBySymbol(rows, todayIso);
+  const lastBySymbol = buildLastBoardMeetingBySymbol(rows, todayIso);
+  const symbols = new Set([...nextBySymbol.keys(), ...lastBySymbol.keys()]);
+  const bySymbol = new Map<string, BoardMeetingInfo>();
+  for (const symbol of symbols) {
+    bySymbol.set(symbol, {
+      next: nextBySymbol.get(symbol) ?? null,
+      last: lastBySymbol.get(symbol) ?? null,
+    });
   }
   return bySymbol;
 }
@@ -345,7 +400,7 @@ async function fetchCorporateBoardMeetingRows(
   );
 }
 
-async function loadBoardMeetingCalendar(): Promise<Map<string, BoardMeeting>> {
+async function loadBoardMeetingCalendar(): Promise<Map<string, BoardMeetingInfo>> {
   if (calendarCache && calendarCache.expiresAt > Date.now()) {
     return calendarCache.bySymbol;
   }
@@ -392,7 +447,7 @@ async function loadBoardMeetingCalendar(): Promise<Map<string, BoardMeeting>> {
       );
     }
 
-    const bySymbol = buildNextBoardMeetingBySymbol(rows, todayIso);
+    const bySymbol = buildBoardMeetingsBySymbol(rows, todayIso);
     calendarCache = {
       expiresAt: Date.now() + CACHE_TTL_MS,
       bySymbol,
@@ -413,11 +468,15 @@ async function loadBoardMeetingCalendar(): Promise<Map<string, BoardMeeting>> {
   }
 }
 
-export async function getNextBoardMeeting(
+export async function getBoardMeetingsForSymbol(
   nseSymbol: string,
-): Promise<BoardMeeting | null> {
+): Promise<BoardMeetingInfo | null> {
   if (isDemoMode()) {
-    return demoGetNextBoardMeeting(nseSymbol);
+    const meetings = await demoGetBoardMeetings(nseSymbol);
+    if (!meetings.next && !meetings.last) {
+      return null;
+    }
+    return meetings;
   }
 
   const symbol = nseSymbol.trim().toUpperCase();

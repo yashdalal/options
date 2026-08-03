@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   addMonthsIso,
+  buildBoardMeetingsBySymbol,
+  buildLastBoardMeetingBySymbol,
   buildNextBoardMeetingBySymbol,
   buildNseBoardMeetingFeedUrl,
   formatNseQueryDate,
@@ -42,14 +44,14 @@ describe("formatNseQueryDate / addMonthsIso", () => {
 });
 
 describe("buildNseBoardMeetingFeedUrl", () => {
-  it("includes from/to dates so today's meetings are not dropped", () => {
+  it("includes lookback and lookahead so last and next meetings resolve", () => {
     expect(buildNseBoardMeetingFeedUrl("event-calendar", "2026-07-23")).toBe(
-      "https://www.nseindia.com/api/event-calendar?index=equities&from_date=23-07-2026&to_date=23-10-2026",
+      "https://www.nseindia.com/api/event-calendar?index=equities&from_date=23-01-2026&to_date=23-10-2026",
     );
     expect(
       buildNseBoardMeetingFeedUrl("corporate-board-meetings", "2026-07-23"),
     ).toBe(
-      "https://www.nseindia.com/api/corporate-board-meetings?index=equities&from_date=23-07-2026&to_date=23-10-2026",
+      "https://www.nseindia.com/api/corporate-board-meetings?index=equities&from_date=23-01-2026&to_date=23-10-2026",
     );
   });
 
@@ -138,6 +140,90 @@ describe("buildNextBoardMeetingBySymbol", () => {
       dateIso: "2026-07-23",
       purpose: "Financial Results",
       description: "Q1 results",
+    });
+  });
+});
+
+describe("buildLastBoardMeetingBySymbol", () => {
+  it("keeps the most recent past meeting per symbol", () => {
+    const bySymbol = buildLastBoardMeetingBySymbol(
+      [
+        {
+          symbol: "ASHOKLEY",
+          purpose: "Financial Results",
+          description: "Older quarter",
+          date: "15-Jan-2026",
+        },
+        {
+          symbol: "ASHOKLEY",
+          purpose: "Financial Results",
+          description: "Prior quarter",
+          date: "12-May-2026",
+        },
+        {
+          symbol: "FUTURECO",
+          purpose: "Financial Results",
+          description: "Upcoming",
+          date: "31-Jul-2026",
+        },
+      ],
+      "2026-07-23",
+    );
+
+    expect(bySymbol.get("ASHOKLEY")).toEqual({
+      dateIso: "2026-05-12",
+      purpose: "Financial Results",
+      description: "Prior quarter",
+    });
+    expect(bySymbol.has("FUTURECO")).toBe(false);
+  });
+});
+
+describe("buildBoardMeetingsBySymbol", () => {
+  it("returns next and last together so blank next still shows last", () => {
+    const bySymbol = buildBoardMeetingsBySymbol(
+      [
+        {
+          symbol: "ASHOKLEY",
+          purpose: "Financial Results",
+          description: "Prior quarter",
+          date: "12-May-2026",
+        },
+        {
+          symbol: "SBIN",
+          purpose: "Financial Results",
+          description: "Upcoming",
+          date: "10-Aug-2026",
+        },
+        {
+          symbol: "SBIN",
+          purpose: "Financial Results",
+          description: "Prior",
+          date: "20-Apr-2026",
+        },
+      ],
+      "2026-07-23",
+    );
+
+    expect(bySymbol.get("ASHOKLEY")).toEqual({
+      next: null,
+      last: {
+        dateIso: "2026-05-12",
+        purpose: "Financial Results",
+        description: "Prior quarter",
+      },
+    });
+    expect(bySymbol.get("SBIN")).toEqual({
+      next: {
+        dateIso: "2026-08-10",
+        purpose: "Financial Results",
+        description: "Upcoming",
+      },
+      last: {
+        dateIso: "2026-04-20",
+        purpose: "Financial Results",
+        description: "Prior",
+      },
     });
   });
 });

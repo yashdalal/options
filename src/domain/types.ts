@@ -119,10 +119,15 @@ export type UnderlyingPriceRanges = {
   oneYear: PriceBand;
 };
 
-export type BoardMeetingInfo = {
+export type BoardMeetingEntry = {
   dateIso: string;
   purpose: string;
   description: string;
+};
+
+export type BoardMeetingInfo = {
+  next: BoardMeetingEntry | null;
+  last: BoardMeetingEntry | null;
 };
 
 export type ScreenSnapshot = {
