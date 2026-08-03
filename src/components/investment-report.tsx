@@ -805,7 +805,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col lg:flex-row">
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-100">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-zinc-100">
       <LoadingProgressBar
         active={running}
         label={
@@ -815,11 +815,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         }
       />
       <div
-        className={`mx-auto flex w-full min-h-0 flex-1 flex-col gap-3 p-4 sm:p-6 ${
+        className={`mx-auto flex w-full flex-col gap-4 p-4 sm:p-6 ${
           basketOpen ? "max-w-none" : "max-w-7xl"
         }`}
       >
-      <header className="relative z-50 shrink-0 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <header className="relative z-50 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -1225,13 +1225,17 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       ) : null}
 
       {error ? (
-        <div className="shrink-0 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
         </div>
       ) : null}
 
+      <div className="sticky top-0 z-40 -mx-4 border-b border-zinc-200 bg-zinc-100/95 px-4 py-2 backdrop-blur-sm sm:-mx-6 sm:px-6">
+        <p className="text-sm text-zinc-600">{statusMessage}</p>
+      </div>
+
       <div
-        className={`min-h-0 flex-1 overflow-auto rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
+        className={`overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
         aria-busy={running}
       >
         <table className="w-full border-separate border-spacing-0 text-sm">
@@ -1244,8 +1248,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-3 py-2.5 text-left font-normal"
                 aria-live="polite"
               >
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-                <div className="flex min-w-0 flex-wrap items-end gap-x-5 gap-y-2">
+                <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
                       Expiry date
@@ -1320,10 +1323,6 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                       {statusLabel}
                     </span>
                   </div>
-                </div>
-                <p className="max-w-md text-sm font-normal text-zinc-600 sm:text-right">
-                  {statusMessage}
-                </p>
                 </div>
               </th>
             </tr>
