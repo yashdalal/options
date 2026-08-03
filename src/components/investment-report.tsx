@@ -713,6 +713,48 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     runBasis,
   ]);
 
+  const statusMessage = useMemo(() => {
+    if (metaLoading) {
+      return "Loading companies…";
+    }
+    if (running) {
+      return `Scanning selected companies for ${formatExpiryLabel(selectedExpiry)}. Qualifying rows appear as each company finishes.`;
+    }
+    if (progress.status === "completed") {
+      const summary =
+        displayedRows.length === 0
+          ? qualifyingSummary
+          : `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.`;
+      return `${summary}${elapsedMs === null ? "" : ` Screener took ${formatDuration(elapsedMs)}.`}`;
+    }
+    if (progress.status === "cancelled") {
+      return `Stopped after ${progress.processed} companies. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`;
+    }
+    if (progress.status === "error") {
+      return `Stopped after ${progress.processed} companies due to an error. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`;
+    }
+    if (selectedCompanies.length > 0 && expiries.length === 0) {
+      return "No shared expiry across the selected companies. Remove a name or clear the list to continue.";
+    }
+    if (selectedCompanies.length > 0) {
+      return `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"} on ${formatExpiryLabel(selectedExpiry)}.`;
+    }
+    return `Pick up to ${MAX_SELECTED_COMPANIES} companies first, then choose an expiry and run the screener.`;
+  }, [
+    displayedRows.length,
+    elapsedMs,
+    expiries.length,
+    metaLoading,
+    progress.eligible,
+    progress.failed,
+    progress.processed,
+    progress.status,
+    qualifyingSummary,
+    running,
+    selectedCompanies.length,
+    selectedExpiry,
+  ]);
+
   function toggleSort(nextKey: ReportSortKey) {
     if (sortKey === nextKey) {
       setSortDir((current) => (current === "asc" ? "desc" : "asc"));
@@ -744,26 +786,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     return () => window.removeEventListener("scroll", closePicker, true);
   }, [companyPickerOpen]);
 
-  const contextRowRef = useRef<HTMLTableCellElement | null>(null);
-  const [contextHeight, setContextHeight] = useState(56);
-
-  useEffect(() => {
-    const node = contextRowRef.current;
-    if (!node || typeof ResizeObserver === "undefined") {
-      return;
-    }
-    const update = () => {
-      setContextHeight(Math.ceil(node.getBoundingClientRect().height));
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [progress.failed, progress.status, running, statusLabel]);
-
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col lg:flex-row">
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-zinc-100">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-auto bg-zinc-100">
       <LoadingProgressBar
         active={running}
         label={
@@ -777,7 +802,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
           basketOpen ? "max-w-none" : "max-w-7xl"
         }`}
       >
-      <header className="relative z-40 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <header className="relative z-50 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -866,7 +891,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
               <div
                 id="company-picker-results"
                 role="listbox"
-                className="absolute z-40 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg"
+                className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg"
               >
                 {filteredCompanies.length === 0 &&
                 companyChoices.otherExpiryMatches.length === 0 ? (
@@ -1188,40 +1213,24 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         </div>
       ) : null}
 
-      <p className="sticky top-0 z-40 border-b border-zinc-200 bg-zinc-100/95 py-2 text-sm text-zinc-600 backdrop-blur-sm">
-        {metaLoading
-          ? "Loading companies…"
-          : running
-            ? `Scanning selected companies for ${formatExpiryLabel(selectedExpiry)}. Qualifying rows appear as each company finishes.`
-            : progress.status === "completed"
-              ? `${
-                  displayedRows.length === 0
-                    ? qualifyingSummary
-                    : `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.`
-                }${elapsedMs === null ? "" : ` Screener took ${formatDuration(elapsedMs)}.`}`
-              : progress.status === "cancelled"
-                ? `Stopped after ${progress.processed} companies. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
-                : progress.status === "error"
-                  ? `Stopped after ${progress.processed} companies due to an error. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
-                  : selectedCompanies.length > 0 && expiries.length === 0
-                    ? "No shared expiry across the selected companies. Remove a name or clear the list to continue."
-                    : selectedCompanies.length > 0
-                      ? `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"} on ${formatExpiryLabel(selectedExpiry)}.`
-                      : `Pick up to ${MAX_SELECTED_COMPANIES} companies first, then choose an expiry and run the screener.`}
-      </p>
-
       <div
-        className={`overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
+        className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
         aria-busy={running}
       >
         <table className="w-full border-separate border-spacing-0 text-sm">
-          <thead>
+          <thead className="sticky top-0 z-40">
             <tr>
               <th
-                ref={contextRowRef}
                 colSpan={REPORT_COLUMN_COUNT}
-                scope="colgroup"
-                className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-3 py-2.5 text-left font-normal"
+                className="border-b border-zinc-200 bg-white px-3 py-2 text-left text-sm font-normal text-zinc-600"
+              >
+                {statusMessage}
+              </th>
+            </tr>
+            <tr>
+              <th
+                colSpan={REPORT_COLUMN_COUNT}
+                className="border-b border-zinc-200 bg-white px-3 py-2 text-left font-normal"
                 aria-live="polite"
               >
                 <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
@@ -1331,10 +1340,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                           : "none"
                         : undefined
                     }
-                    style={{ top: contextHeight }}
-                    className={`sticky z-20 border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8] ${
+                    className={`border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8] ${
                       stickyAction
-                        ? "left-0 z-30 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08),inset_0_-1px_0_#d4d4d8]"
+                        ? "sticky left-0 z-30 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08),inset_0_-1px_0_#d4d4d8]"
                         : ""
                     }`}
                   >
