@@ -713,6 +713,48 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     runBasis,
   ]);
 
+  const statusMessage = useMemo(() => {
+    if (metaLoading) {
+      return "Loading companies…";
+    }
+    if (running) {
+      return `Scanning selected companies for ${formatExpiryLabel(selectedExpiry)}. Qualifying rows appear as each company finishes.`;
+    }
+    if (progress.status === "completed") {
+      const summary =
+        displayedRows.length === 0
+          ? qualifyingSummary
+          : `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.`;
+      return `${summary}${elapsedMs === null ? "" : ` Screener took ${formatDuration(elapsedMs)}.`}`;
+    }
+    if (progress.status === "cancelled") {
+      return `Stopped after ${progress.processed} companies. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`;
+    }
+    if (progress.status === "error") {
+      return `Stopped after ${progress.processed} companies due to an error. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`;
+    }
+    if (selectedCompanies.length > 0 && expiries.length === 0) {
+      return "No shared expiry across the selected companies. Remove a name or clear the list to continue.";
+    }
+    if (selectedCompanies.length > 0) {
+      return `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"} on ${formatExpiryLabel(selectedExpiry)}.`;
+    }
+    return `Pick up to ${MAX_SELECTED_COMPANIES} companies first, then choose an expiry and run the screener.`;
+  }, [
+    displayedRows.length,
+    elapsedMs,
+    expiries.length,
+    metaLoading,
+    progress.eligible,
+    progress.failed,
+    progress.processed,
+    progress.status,
+    qualifyingSummary,
+    running,
+    selectedCompanies.length,
+    selectedExpiry,
+  ]);
+
   function toggleSort(nextKey: ReportSortKey) {
     if (sortKey === nextKey) {
       setSortDir((current) => (current === "asc" ? "desc" : "asc"));
@@ -759,11 +801,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     const observer = new ResizeObserver(update);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [progress.failed, progress.status, running, statusLabel]);
+  }, [progress.failed, progress.status, running, statusLabel, statusMessage]);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col lg:flex-row">
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-zinc-100">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-100">
       <LoadingProgressBar
         active={running}
         label={
@@ -773,11 +815,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         }
       />
       <div
-        className={`mx-auto flex w-full flex-col gap-4 p-4 sm:p-6 ${
+        className={`mx-auto flex w-full min-h-0 flex-1 flex-col gap-3 p-4 sm:p-6 ${
           basketOpen ? "max-w-none" : "max-w-7xl"
         }`}
       >
-      <header className="relative z-40 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <header className="relative z-50 shrink-0 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -866,7 +908,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
               <div
                 id="company-picker-results"
                 role="listbox"
-                className="absolute z-40 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg"
+                className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg"
               >
                 {filteredCompanies.length === 0 &&
                 companyChoices.otherExpiryMatches.length === 0 ? (
@@ -1183,35 +1225,13 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="shrink-0 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
         </div>
       ) : null}
 
-      <p className="sticky top-0 z-40 border-b border-zinc-200 bg-zinc-100/95 py-2 text-sm text-zinc-600 backdrop-blur-sm">
-        {metaLoading
-          ? "Loading companies…"
-          : running
-            ? `Scanning selected companies for ${formatExpiryLabel(selectedExpiry)}. Qualifying rows appear as each company finishes.`
-            : progress.status === "completed"
-              ? `${
-                  displayedRows.length === 0
-                    ? qualifyingSummary
-                    : `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.`
-                }${elapsedMs === null ? "" : ` Screener took ${formatDuration(elapsedMs)}.`}`
-              : progress.status === "cancelled"
-                ? `Stopped after ${progress.processed} companies. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
-                : progress.status === "error"
-                  ? `Stopped after ${progress.processed} companies due to an error. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`
-                  : selectedCompanies.length > 0 && expiries.length === 0
-                    ? "No shared expiry across the selected companies. Remove a name or clear the list to continue."
-                    : selectedCompanies.length > 0
-                      ? `Ready to screen ${selectedCompanies.length} selected compan${selectedCompanies.length === 1 ? "y" : "ies"} on ${formatExpiryLabel(selectedExpiry)}.`
-                      : `Pick up to ${MAX_SELECTED_COMPANIES} companies first, then choose an expiry and run the screener.`}
-      </p>
-
       <div
-        className={`overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
+        className={`min-h-0 flex-1 overflow-auto rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
         aria-busy={running}
       >
         <table className="w-full border-separate border-spacing-0 text-sm">
@@ -1224,7 +1244,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                 className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-3 py-2.5 text-left font-normal"
                 aria-live="polite"
               >
-                <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                <div className="flex min-w-0 flex-wrap items-end gap-x-5 gap-y-2">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
                       Expiry date
@@ -1299,6 +1320,10 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                       {statusLabel}
                     </span>
                   </div>
+                </div>
+                <p className="max-w-md text-sm font-normal text-zinc-600 sm:text-right">
+                  {statusMessage}
+                </p>
                 </div>
               </th>
             </tr>

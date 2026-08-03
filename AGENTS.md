@@ -4,6 +4,10 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# UI changes need before/after evidence
+
+For user-visible UI work, capture **before** and **after** screenshots (or a short video), preferably in demo mode. Put them under `docs/pr-evidence/…`, label them with the PR number once it exists, and embed them in the PR body. See `.cursor/rules/ui-evidence-screenshots.mdc`.
+
 # Fail visibly — never paper over bad data
 
 This app supports trading decisions. Prefer a hard failure or an explicit empty/unavailable state over a “helpful” fallback that could show stale, approximate, or silently degraded numbers.

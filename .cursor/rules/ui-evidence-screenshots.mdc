@@ -1,0 +1,17 @@
+---
+description: Require before/after screenshots (with PR id) for UI changes
+alwaysApply: true
+---
+
+# UI evidence — before/after screenshots
+
+When changing user-visible UI (layout, styling, copy, sticky/scroll behavior, tables, trays, nav):
+
+1. **Before** — capture screenshots (or a short video) of the current UI in the broken/prior state before editing.
+2. **After** — capture the same views after the fix.
+3. Prefer **demo mode** (`DEMO_MODE=1`) when live broker data is not required.
+4. Store evidence under `docs/pr-evidence/<issue-or-slug>/{before,after}/` as compressed JPEG when possible.
+5. After the PR exists, **label evidence with the PR number** (filename and/or on-image badge, e.g. `PR #57`) and link those files in the PR body.
+6. Include before/after images in the PR description — do not ship UI-only PRs without visual proof unless capture is impossible (then say why).
+
+Do not skip this for “small” UI tweaks that change layout or scroll/sticky behavior.
