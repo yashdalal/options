@@ -1584,7 +1584,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       </div>
 
       {basketOpen ? (
-        <aside className="flex min-h-0 w-full shrink-0 flex-col border-t border-zinc-200 bg-white lg:h-full lg:w-80 lg:border-t-0 lg:border-l">
+        <aside className="flex min-h-0 w-full shrink-0 flex-col border-t border-zinc-200 bg-white lg:h-full lg:w-96 lg:border-t-0 lg:border-l">
           <BasketTray
             legs={basketLegs}
             onChangeLegs={(next) => {
