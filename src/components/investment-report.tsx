@@ -1158,7 +1158,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         </div>
       ) : null}
 
-      <p className="text-sm text-zinc-600">
+      <p className="sticky top-0 z-40 border-b border-zinc-200 bg-zinc-100/95 py-2 text-sm text-zinc-600 backdrop-blur-sm">
         {metaLoading
           ? "Loading companies…"
           : running
