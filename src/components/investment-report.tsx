@@ -786,26 +786,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     return () => window.removeEventListener("scroll", closePicker, true);
   }, [companyPickerOpen]);
 
-  const stickyChromeRef = useRef<HTMLDivElement | null>(null);
-  const [stickyChromeHeight, setStickyChromeHeight] = useState(88);
-
-  useEffect(() => {
-    const node = stickyChromeRef.current;
-    if (!node || typeof ResizeObserver === "undefined") {
-      return;
-    }
-    const update = () => {
-      setStickyChromeHeight(Math.ceil(node.getBoundingClientRect().height));
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [progress.failed, progress.status, running, statusLabel, statusMessage]);
-
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col lg:flex-row">
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-zinc-100">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-auto bg-zinc-100">
       <LoadingProgressBar
         active={running}
         label={
@@ -1231,99 +1214,103 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       ) : null}
 
       <div
-        ref={stickyChromeRef}
-        className="sticky top-0 z-40 -mx-4 space-y-2 bg-zinc-100/95 px-4 py-2 backdrop-blur-sm sm:-mx-6 sm:px-6"
-      >
-        <p className="text-sm text-zinc-600">{statusMessage}</p>
-        <div
-          className="rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 shadow-sm"
-          aria-live="polite"
-        >
-          <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Expiry date
-              </span>
-              <span className="text-sm font-semibold text-zinc-900">
-                {selectedExpiry ? formatExpiryLabel(selectedExpiry) : "—"}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Calendar days
-              </span>
-              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                {daysToExpiry.calendar ?? "—"}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Working days
-              </span>
-              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                {daysToExpiry.working ?? "—"}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Min spread %
-              </span>
-              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                {formatNumber(appliedSpread, 0)}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Min return % p.a.
-              </span>
-              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                {formatNumber(appliedReturn, 0)}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Processed
-              </span>
-              <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                {progress.status === "idle"
-                  ? "—"
-                  : `${progress.processed} / ${progress.eligible}`}
-              </span>
-            </div>
-            {progress.status !== "idle" && progress.failed > 0 ? (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                  Failed
-                </span>
-                <span className="text-sm font-semibold text-zinc-900 tabular-nums">
-                  {progress.failed}
-                </span>
-              </div>
-            ) : null}
-            <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
-              <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
-                Status
-              </span>
-              <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
-                {running ? (
-                  <span
-                    className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800"
-                    aria-hidden
-                  />
-                ) : null}
-                {statusLabel}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div
-        className={`overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
+        className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}
         aria-busy={running}
       >
         <table className="w-full border-separate border-spacing-0 text-sm">
-          <thead>
+          <thead className="sticky top-0 z-40">
+            <tr>
+              <th
+                colSpan={REPORT_COLUMN_COUNT}
+                className="border-b border-zinc-200 bg-white px-3 py-2 text-left text-sm font-normal text-zinc-600"
+              >
+                {statusMessage}
+              </th>
+            </tr>
+            <tr>
+              <th
+                colSpan={REPORT_COLUMN_COUNT}
+                className="border-b border-zinc-200 bg-white px-3 py-2 text-left font-normal"
+                aria-live="polite"
+              >
+                <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Expiry date
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900">
+                      {selectedExpiry ? formatExpiryLabel(selectedExpiry) : "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Calendar days
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {daysToExpiry.calendar ?? "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Working days
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {daysToExpiry.working ?? "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Min spread %
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {formatNumber(appliedSpread, 0)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Min return % p.a.
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {formatNumber(appliedReturn, 0)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Processed
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                      {progress.status === "idle"
+                        ? "—"
+                        : `${progress.processed} / ${progress.eligible}`}
+                    </span>
+                  </div>
+                  {progress.status !== "idle" && progress.failed > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                        Failed
+                      </span>
+                      <span className="text-sm font-semibold text-zinc-900 tabular-nums">
+                        {progress.failed}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="flex min-w-0 flex-col gap-0.5 sm:ml-auto">
+                    <span className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                      Status
+                    </span>
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
+                      {running ? (
+                        <span
+                          className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800"
+                          aria-hidden
+                        />
+                      ) : null}
+                      {statusLabel}
+                    </span>
+                  </div>
+                </div>
+              </th>
+            </tr>
             <tr className="text-left text-zinc-700">
               {(
                 [
@@ -1353,10 +1340,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                           : "none"
                         : undefined
                     }
-                    style={{ top: stickyChromeHeight }}
-                    className={`sticky z-20 border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8] ${
+                    className={`border-b border-zinc-200 bg-zinc-50 px-3 py-2 font-semibold whitespace-nowrap shadow-[inset_0_-1px_0_#d4d4d8] ${
                       stickyAction
-                        ? "left-0 z-30 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08),inset_0_-1px_0_#d4d4d8]"
+                        ? "sticky left-0 z-30 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08),inset_0_-1px_0_#d4d4d8]"
                         : ""
                     }`}
                   >
