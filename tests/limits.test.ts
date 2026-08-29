@@ -30,7 +30,7 @@ describe("parseUsedMargin", () => {
   it("reads the exact broker MarginUsed field", () => {
     expect(parseUsedMargin(limitsFixture)).toEqual({
       usedMargin: 286450.75,
-      brokerUpdatedAt: "2026-08-29T14:00:00.000Z",
+      brokerUpdatedAt: "2026-08-29T18:00:00.000Z",
     });
   });
 

@@ -18,10 +18,9 @@ const limitsDataSchema = z
   })
   .passthrough();
 
-const limitsResponseSchema = z.union([
-  limitsDataSchema,
-  z.object({ data: limitsDataSchema }).passthrough(),
-]);
+const wrappedLimitsResponseSchema = z
+  .object({ data: limitsDataSchema })
+  .passthrough();
 
 export type UsedMarginResult = {
   usedMargin: number;
@@ -56,8 +55,10 @@ export function parseUsedMargin(payload: unknown): UsedMarginResult {
     );
   }
 
-  const parsed = limitsResponseSchema.safeParse(payload);
-  if (!parsed.success) {
+  const wrapped = wrappedLimitsResponseSchema.safeParse(payload);
+  const direct = limitsDataSchema.safeParse(payload);
+  const data = wrapped.success ? wrapped.data.data : direct.success ? direct.data : null;
+  if (!data) {
     throw new KotakApiError(
       "Unexpected limits response shape",
       500,
@@ -66,7 +67,6 @@ export function parseUsedMargin(payload: unknown): UsedMarginResult {
     );
   }
 
-  const data = "data" in parsed.data ? parsed.data.data : parsed.data;
   const usedMargin = parseNonNegativeNumber(data.MarginUsed);
   if (usedMargin === null) {
     throw new KotakApiError(
