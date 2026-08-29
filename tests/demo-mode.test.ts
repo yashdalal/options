@@ -124,6 +124,23 @@ describe("demo mode", () => {
     expect(monitor.optionPositionCount).toBeGreaterThan(0);
     expect(monitor.groups.length).toBeGreaterThan(0);
     expect(monitor.missingSymbols).toEqual([]);
+    expect(monitor.accountSummaries).toEqual([
+      expect.objectContaining({
+        accountId: "prakash",
+        usedMargin: 286_450.75,
+        usedMarginError: false,
+      }),
+      expect.objectContaining({
+        accountId: "gopa",
+        usedMargin: 194_820.5,
+        usedMarginError: false,
+      }),
+      expect.objectContaining({
+        accountId: "huf",
+        usedMargin: 351_275.25,
+        usedMarginError: false,
+      }),
+    ]);
 
     const expiryIso = monitor.groups[0]?.expiryIso;
     expect(expiryIso).toBeTruthy();

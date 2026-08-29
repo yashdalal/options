@@ -39,6 +39,7 @@ Positions are tagged with `accountId` / `accountLabel` for attribution. Within e
 Cash **indexes** must use Kotak’s named identifier, not `pSymbol` (e.g. `nse_cm|Nifty 50`, `bse_cm|SENSEX`). Equity/FO still use the numeric token.
 | Scrip master | `{baseUrl}/script-details/1.0/masterscrip/file-paths` | `Authorization: <access token>` |
 | Check margin | `{baseUrl}/quick/user/check-margin` | `Auth`, `Sid`, `neo-fin-key` (no Authorization) |
+| RMS limits | `{baseUrl}/quick/user/limits?segment=ALL&exchange=ALL&product=ALL` | `Auth`, `Sid`, `neo-fin-key` (no Authorization) |
 
 Official Postman also shows quotes with a trailing `/{quote_type}` (for example `/all`). This app uses the path without `quote_type`, which already works for cash spots; FO option LTP uses the same helper. If a live probe ever returns empty FO quotes, try appending `/all` or `/ltp`.
 
@@ -71,6 +72,19 @@ jData={"brkName":"KOTAK","brnchId":"ONLINE","exSeg":"<nse_fo|bse_fo>","prc":"<pr
 ```
 
 Prefer response `ordMrgn` as incremental margin for the checked order (fallbacks: `reqdMrgn`, then `totMrgnUsd` / `mrgnUsd`). `totMrgnUsd` is account-level total including existing positions, so it is too high for screener return math. One instrument per request. Expect `429` under load; the app shares an ~8 req/s limiter across quotes and margin.
+
+## RMS used margin
+
+`GET {baseUrl}/quick/user/limits?segment=ALL&exchange=ALL&product=ALL` returns the
+account's RMS limits. Use the top-level `MarginUsed` field as the exact broker-reported
+used margin and `TimeStamp` as its broker update time. Do not substitute
+`MarginUsedPrsnt`, `AmountUtilizedPrsnt`, a `check-margin` field, or the local SPAN
+estimate when `MarginUsed` is absent.
+
+The Near Expiry monitor calls this endpoint separately for Prakash, Gopa, and HUF on
+its manual and 60-second refreshes. A limits failure is shown as unavailable for the
+affected account while independent position and price data remain usable. A broker
+session-expiry response still requires that account to reconnect.
 
 ## Positions quantity
 

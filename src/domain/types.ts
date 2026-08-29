@@ -53,6 +53,9 @@ export type AccountPositionSummary = {
   accountId: AccountId;
   accountLabel: string;
   optionPositionCount: number;
+  usedMargin: number | null;
+  usedMarginUpdatedAt: string | null;
+  usedMarginError: boolean;
 };
 
 export type MonitorSnapshot = {

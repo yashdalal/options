@@ -384,9 +384,23 @@ export function MonitorDashboard({
         {snapshot?.accountSummaries.map((summary) => (
           <span
             key={summary.accountId}
-            className={`rounded-full px-2 py-0.5 font-medium ${accountBadgeClass(summary.accountId)}`}
+            className={`inline-flex flex-wrap items-center gap-x-1.5 rounded-lg px-2.5 py-1 font-medium ${accountBadgeClass(summary.accountId)}`}
+            title={
+              summary.usedMarginUpdatedAt
+                ? `Kotak updated ${new Date(summary.usedMarginUpdatedAt).toLocaleString()}`
+                : undefined
+            }
           >
-            {summary.accountLabel}: {summary.optionPositionCount}
+            <span>{summary.accountLabel}</span>
+            <span aria-hidden>·</span>
+            <span>{summary.optionPositionCount} positions</span>
+            <span aria-hidden>·</span>
+            <span>
+              Used margin:{" "}
+              {summary.usedMarginError
+                ? "Unavailable"
+                : formatRupees(summary.usedMargin)}
+            </span>
           </span>
         ))}
       </div>
