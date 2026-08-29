@@ -24,6 +24,7 @@ const session: TradeSessionCredentials = {
   tradingSid: "sid",
   baseUrl: "https://example.kotaksecurities.com",
   neoFinKey: "neo",
+  serverId: "server4",
 };
 
 describe("parseUsedMargin", () => {
@@ -67,15 +68,28 @@ describe("fetchUsedMargin", () => {
     });
 
     expect(kotakFetch).toHaveBeenCalledWith(
-      "https://example.kotaksecurities.com/quick/user/limits?segment=ALL&exchange=ALL&product=ALL",
+      "https://example.kotaksecurities.com/quick/user/limits?sId=server4",
       {
-        method: "GET",
+        method: "POST",
+        bodyEncoding: "form",
         headers: {
           Auth: "trade",
           Sid: "sid",
           "neo-fin-key": "neo",
         },
+        body: {
+          seg: "ALL",
+          exch: "ALL",
+          prod: "ALL",
+        },
       },
     );
+  });
+
+  it("fails visibly when the session lacks the routing server ID", async () => {
+    await expect(fetchUsedMargin({ ...session, serverId: undefined })).rejects.toThrow(
+      "Trading session is missing the Kotak server ID",
+    );
+    expect(kotakFetch).not.toHaveBeenCalled();
   });
 });

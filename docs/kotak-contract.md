@@ -39,7 +39,7 @@ Positions are tagged with `accountId` / `accountLabel` for attribution. Within e
 Cash **indexes** must use Kotak’s named identifier, not `pSymbol` (e.g. `nse_cm|Nifty 50`, `bse_cm|SENSEX`). Equity/FO still use the numeric token.
 | Scrip master | `{baseUrl}/script-details/1.0/masterscrip/file-paths` | `Authorization: <access token>` |
 | Check margin | `{baseUrl}/quick/user/check-margin` | `Auth`, `Sid`, `neo-fin-key` (no Authorization) |
-| RMS limits | `{baseUrl}/quick/user/limits?segment=ALL&exchange=ALL&product=ALL` | `Auth`, `Sid`, `neo-fin-key` (no Authorization) |
+| RMS limits | `POST {baseUrl}/quick/user/limits?sId={hsServerId}` | `Auth`, `Sid`, `neo-fin-key` (no Authorization) |
 
 Official Postman also shows quotes with a trailing `/{quote_type}` (for example `/all`). This app uses the path without `quote_type`, which already works for cash spots; FO option LTP uses the same helper. If a live probe ever returns empty FO quotes, try appending `/all` or `/ltp`.
 
@@ -75,9 +75,10 @@ Prefer response `ordMrgn` as incremental margin for the checked order (fallbacks
 
 ## RMS used margin
 
-`GET {baseUrl}/quick/user/limits?segment=ALL&exchange=ALL&product=ALL` returns the
-account's RMS limits. Use the top-level `MarginUsed` field as the exact broker-reported
-used margin and `TimeStamp` as its broker update time. Do not substitute
+`POST {baseUrl}/quick/user/limits?sId={hsServerId}` with form fields
+`seg=ALL`, `exch=ALL`, and `prod=ALL` returns the account's RMS limits. The
+`hsServerId` comes from MPIN validation. Use the top-level `MarginUsed` field as the
+exact broker-reported used margin and `TimeStamp` as its broker update time. Do not substitute
 `MarginUsedPrsnt`, `AmountUtilizedPrsnt`, a `check-margin` field, or the local SPAN
 estimate when `MarginUsed` is absent.
 

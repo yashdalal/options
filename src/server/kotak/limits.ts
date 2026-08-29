@@ -89,19 +89,30 @@ export async function fetchUsedMargin(
   if (isDemoMode()) {
     return demoFetchUsedMargin(session);
   }
+  if (!session.serverId) {
+    throw new KotakApiError(
+      "Trading session is missing the Kotak server ID",
+      500,
+      "invalid_response",
+    );
+  }
 
   const url = new URL(`${session.baseUrl}/quick/user/limits`);
-  url.searchParams.set("segment", "ALL");
-  url.searchParams.set("exchange", "ALL");
-  url.searchParams.set("product", "ALL");
+  url.searchParams.set("sId", session.serverId);
 
   return getKotakRateLimiter().schedule(async () => {
     const payload = await kotakFetch(url.toString(), {
-      method: "GET",
+      method: "POST",
+      bodyEncoding: "form",
       headers: {
         Auth: session.tradingToken,
         Sid: session.tradingSid,
         "neo-fin-key": session.neoFinKey,
+      },
+      body: {
+        seg: "ALL",
+        exch: "ALL",
+        prod: "ALL",
       },
     });
     return parseUsedMargin(payload);
