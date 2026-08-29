@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ACCOUNT_DEFINITIONS, type AccountId } from "@/config/accounts";
-import { calculateAnnualizedReturnPct } from "@/domain/screening";
+import {
+  calculateAnnualizedReturnPct,
+  calculateBasketNetPremium,
+  calendarDaysLeft,
+} from "@/domain/screening";
 import type { ScreenCandidate } from "@/domain/types";
 import { formatPercent, formatRupees } from "@/lib/format";
 
@@ -156,13 +160,7 @@ export function BasketTray({
   }
 
   const netPremium = useMemo(() => {
-    return legs.reduce((sum, leg) => {
-      if (leg.premium === null) {
-        return sum;
-      }
-      const sign = leg.side === "SELL" ? 1 : -1;
-      return sum + sign * leg.premium * leg.lotSize * leg.lots;
-    }, 0);
+    return calculateBasketNetPremium(legs);
   }, [legs]);
 
   const sharedExpiry = useMemo(() => {
@@ -177,25 +175,17 @@ export function BasketTray({
     if (!sharedExpiry) {
       return null;
     }
-    const [year, month, day] = sharedExpiry.split("-").map(Number);
-    const expiry = Date.UTC(year, month - 1, day);
-    const today = new Date();
-    const start = Date.UTC(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-    );
-    return Math.max(0, Math.round((expiry - start) / 86_400_000));
+    return calendarDaysLeft(sharedExpiry);
   }, [sharedExpiry]);
 
   const capitalForReturn =
     result?.account?.incremental.total ?? result?.basket.total ?? null;
   const periodReturnPct =
-    capitalForReturn !== null && capitalForReturn > 0
+    netPremium !== null && capitalForReturn !== null && capitalForReturn > 0
       ? (netPremium / capitalForReturn) * 100
       : null;
   const annualizedReturn =
-    capitalForReturn !== null && daysLeft !== null
+    netPremium !== null && capitalForReturn !== null && daysLeft !== null
       ? calculateAnnualizedReturnPct(netPremium, capitalForReturn, daysLeft)
       : null;
 

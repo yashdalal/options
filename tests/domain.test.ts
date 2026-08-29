@@ -18,6 +18,7 @@ import {
   allocateLotsAcrossBids,
   buildScreenCandidate,
   calculateAnnualizedReturnPct,
+  calculateBasketNetPremium,
   calculateNetPremium,
   calculateOptionSellExpenses,
   calculateSpreadPct,
@@ -353,6 +354,58 @@ describe("screening math", () => {
     const net = calculateNetPremium(10, 100, 1);
     const annualized = calculateAnnualizedReturnPct(net, 50_000, 30);
     expect(annualized).toBeCloseTo((net / 50_000) * (365 / 30) * 100);
+  });
+
+  it("deducts sell-side charges from basket premium", () => {
+    const netPremium = calculateBasketNetPremium([
+      {
+        side: "SELL",
+        premium: 0.9,
+        lotSize: 400,
+        lots: 1,
+      },
+    ]);
+
+    expect(netPremium).toBeCloseTo(calculateNetPremium(0.9, 400, 1), 5);
+    expect(netPremium).toBeCloseTo(347.51076776, 5);
+  });
+
+  it("aggregates basket credits and debits", () => {
+    const netPremium = calculateBasketNetPremium([
+      {
+        side: "SELL",
+        premium: 10,
+        lotSize: 100,
+        lots: 2,
+      },
+      {
+        side: "BUY",
+        premium: 4,
+        lotSize: 100,
+        lots: 2,
+      },
+    ]);
+
+    expect(netPremium).toBeCloseTo(calculateNetPremium(10, 100, 2) - 800, 5);
+  });
+
+  it("marks basket premium unavailable when any leg is missing a premium", () => {
+    expect(
+      calculateBasketNetPremium([
+        {
+          side: "SELL",
+          premium: 10,
+          lotSize: 100,
+          lots: 1,
+        },
+        {
+          side: "BUY",
+          premium: null,
+          lotSize: 100,
+          lots: 1,
+        },
+      ]),
+    ).toBeNull();
   });
 
   it("builds screen candidates with dynamic expenses and min spread only", () => {
