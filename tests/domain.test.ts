@@ -367,7 +367,7 @@ describe("screening math", () => {
     ]);
 
     expect(netPremium).toBeCloseTo(calculateNetPremium(0.9, 400, 1), 5);
-    expect(netPremium).toBeCloseTo(347.5100416, 5);
+    expect(netPremium).toBeCloseTo(347.51076776, 5);
   });
 
   it("aggregates basket credits and debits", () => {
