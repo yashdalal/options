@@ -53,6 +53,7 @@ export type AccountPositionSummary = {
   accountId: AccountId;
   accountLabel: string;
   optionPositionCount: number;
+  usedMargin: number | null;
 };
 
 export type MonitorSnapshot = {
