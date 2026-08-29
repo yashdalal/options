@@ -24,22 +24,15 @@ const session: TradeSessionCredentials = {
   tradingSid: "sid",
   baseUrl: "https://example.kotaksecurities.com",
   neoFinKey: "neo",
-  serverId: "server4",
 };
 
 describe("parseUsedMargin", () => {
   it("reads the exact broker MarginUsed field", () => {
-    expect(parseUsedMargin(limitsFixture)).toEqual({
-      usedMargin: 286450.75,
-      brokerUpdatedAt: "2026-08-29T18:00:00.000Z",
-    });
+    expect(parseUsedMargin(limitsFixture)).toBe(286450.75);
   });
 
   it("accepts a data-wrapped response", () => {
-    expect(parseUsedMargin({ data: { MarginUsed: 0, stat: "Ok" } })).toEqual({
-      usedMargin: 0,
-      brokerUpdatedAt: null,
-    });
+    expect(parseUsedMargin({ data: { MarginUsed: 0, stat: "Ok" } })).toBe(0);
   });
 
   it("does not substitute a related margin field", () => {
@@ -63,12 +56,10 @@ describe("fetchUsedMargin", () => {
   it("requests all account limits with the trading session", async () => {
     kotakFetch.mockResolvedValue(limitsFixture);
 
-    await expect(fetchUsedMargin(session)).resolves.toMatchObject({
-      usedMargin: 286450.75,
-    });
+    await expect(fetchUsedMargin(session)).resolves.toBe(286450.75);
 
     expect(kotakFetch).toHaveBeenCalledWith(
-      "https://example.kotaksecurities.com/quick/user/limits?sId=server4",
+      "https://example.kotaksecurities.com/quick/user/limits",
       {
         method: "POST",
         bodyEncoding: "form",
@@ -84,12 +75,5 @@ describe("fetchUsedMargin", () => {
         },
       },
     );
-  });
-
-  it("fails visibly when the session lacks the routing server ID", async () => {
-    await expect(fetchUsedMargin({ ...session, serverId: undefined })).rejects.toThrow(
-      "Trading session is missing the Kotak server ID",
-    );
-    expect(kotakFetch).not.toHaveBeenCalled();
   });
 });

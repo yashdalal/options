@@ -128,17 +128,14 @@ describe("demo mode", () => {
       expect.objectContaining({
         accountId: "prakash",
         usedMargin: 286_450.75,
-        usedMarginError: false,
       }),
       expect.objectContaining({
         accountId: "gopa",
         usedMargin: 194_820.5,
-        usedMarginError: false,
       }),
       expect.objectContaining({
         accountId: "huf",
         usedMargin: 351_275.25,
-        usedMarginError: false,
       }),
     ]);
 

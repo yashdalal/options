@@ -385,11 +385,6 @@ export function MonitorDashboard({
           <span
             key={summary.accountId}
             className={`inline-flex flex-wrap items-center gap-x-1.5 rounded-lg px-2.5 py-1 font-medium ${accountBadgeClass(summary.accountId)}`}
-            title={
-              summary.usedMarginUpdatedAt
-                ? `Kotak updated ${new Date(summary.usedMarginUpdatedAt).toLocaleString()}`
-                : undefined
-            }
           >
             <span>{summary.accountLabel}</span>
             <span aria-hidden>·</span>
@@ -397,7 +392,7 @@ export function MonitorDashboard({
             <span aria-hidden>·</span>
             <span>
               Used margin:{" "}
-              {summary.usedMarginError
+              {summary.usedMargin === null
                 ? "Unavailable"
                 : formatRupees(summary.usedMargin)}
             </span>

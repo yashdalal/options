@@ -41,7 +41,6 @@ export function demoTradeCredentials(accountId: AccountId): TradeSessionCredenti
     tradingSid: `demo-sid-${accountId}`,
     baseUrl: DEMO_BASE_URL,
     neoFinKey: "neotradeapi",
-    serverId: "demo-server",
   };
 }
 

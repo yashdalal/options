@@ -56,11 +56,6 @@ async function buildSnapshot(
         const [rawPositions, margin] = await Promise.all([
           fetchPositions(session, requestId, definition.id),
           fetchUsedMargin(session)
-            .then((result) => ({
-              usedMargin: result.usedMargin,
-              usedMarginUpdatedAt: result.brokerUpdatedAt,
-              usedMarginError: false,
-            }))
             .catch((error: unknown) => {
               if (isKotakApiError(error) && error.code === "session_expired") {
                 throw error;
@@ -70,11 +65,7 @@ async function buildSnapshot(
                 accountId: definition.id,
                 message: safeErrorMessage(error),
               });
-              return {
-                usedMargin: null,
-                usedMarginUpdatedAt: null,
-                usedMarginError: true,
-              };
+              return null;
             }),
         ]);
         const positions = normalizePositions(rawPositions, registry, {
@@ -85,7 +76,7 @@ async function buildSnapshot(
           accountId: definition.id,
           accountLabel: definition.label,
           positions,
-          ...margin,
+          usedMargin: margin,
         };
       } catch (error) {
         await handleBrokerAuthFailure(sessionId, definition.id, error);
@@ -100,8 +91,6 @@ async function buildSnapshot(
     accountLabel: result.accountLabel,
     optionPositionCount: result.positions.length,
     usedMargin: result.usedMargin,
-    usedMarginUpdatedAt: result.usedMarginUpdatedAt,
-    usedMarginError: result.usedMarginError,
   }));
 
   logInfo(`Found ${positions.length} option positions across accounts`);

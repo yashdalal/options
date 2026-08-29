@@ -12,7 +12,6 @@ const numericValueSchema = z.union([z.string(), z.number()]);
 const limitsDataSchema = z
   .object({
     MarginUsed: numericValueSchema,
-    TimeStamp: numericValueSchema.optional(),
     stat: z.string().optional(),
     stCode: numericValueSchema.optional(),
   })
@@ -22,29 +21,12 @@ const wrappedLimitsResponseSchema = z
   .object({ data: limitsDataSchema })
   .passthrough();
 
-export type UsedMarginResult = {
-  usedMargin: number;
-  brokerUpdatedAt: string | null;
-};
-
 function parseNonNegativeNumber(value: string | number): number | null {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function parseBrokerTimestamp(value: string | number | undefined): string | null {
-  if (value === undefined) {
-    return null;
-  }
-  const timestamp = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(timestamp) || timestamp <= 0) {
-    return null;
-  }
-  const date = new Date(timestamp);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
-export function parseUsedMargin(payload: unknown): UsedMarginResult {
+export function parseUsedMargin(payload: unknown): number {
   const failure = detectBrokerFailure(payload);
   if (failure) {
     throw new KotakApiError(
@@ -77,31 +59,18 @@ export function parseUsedMargin(payload: unknown): UsedMarginResult {
     );
   }
 
-  return {
-    usedMargin,
-    brokerUpdatedAt: parseBrokerTimestamp(data.TimeStamp),
-  };
+  return usedMargin;
 }
 
 export async function fetchUsedMargin(
   session: TradeSessionCredentials,
-): Promise<UsedMarginResult> {
+): Promise<number> {
   if (isDemoMode()) {
     return demoFetchUsedMargin(session);
   }
-  if (!session.serverId) {
-    throw new KotakApiError(
-      "Trading session is missing the Kotak server ID",
-      500,
-      "invalid_response",
-    );
-  }
-
-  const url = new URL(`${session.baseUrl}/quick/user/limits`);
-  url.searchParams.set("sId", session.serverId);
 
   return getKotakRateLimiter().schedule(async () => {
-    const payload = await kotakFetch(url.toString(), {
+    const payload = await kotakFetch(`${session.baseUrl}/quick/user/limits`, {
       method: "POST",
       bodyEncoding: "form",
       headers: {
