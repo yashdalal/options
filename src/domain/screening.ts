@@ -113,29 +113,6 @@ export function calculateNetPremium(
   return premium * lotSize * lots - calculateOptionSellExpenses(premium, lotSize, lots);
 }
 
-export type BasketPremiumLeg = {
-  side: "BUY" | "SELL";
-  premium: number | null;
-  lotSize: number;
-  lots: number;
-};
-
-export function calculateBasketNetPremium(legs: BasketPremiumLeg[]): number | null {
-  let netPremium = 0;
-  for (const leg of legs) {
-    const premium = leg.premium;
-    if (premium === null) {
-      return null;
-    }
-    if (leg.side === "SELL") {
-      netPremium += calculateNetPremium(premium, leg.lotSize, leg.lots);
-    } else {
-      netPremium -= premium * leg.lotSize * leg.lots;
-    }
-  }
-  return netPremium;
-}
-
 export type BidDepthLevel = {
   price: number;
   quantity: number;
