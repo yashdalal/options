@@ -12,7 +12,6 @@ Read-only against the broker: the app fetches positions, quotes, scrip master, a
 - Resolves underlyings, strikes, expiries, and lot sizes from Kotak's daily scrip master
 - Groups by expiry and company; same-strike calls/puts across accounts merge into one row (expand for per-account legs)
 - Spot comes from the Kotak quote `ltp` / `last_traded_price`. If those are missing, previous-day `ohlc.close` is used with a warning icon (not shown as a silent live LTP)
-- Shows Kotak RMS `MarginUsed` for Prakash, Gopa, and HUF on each refresh; an unavailable account margin is flagged without hiding position data
 - Editable highlight threshold (% distance from strike) plus a "show near only" filter, both persisted in browser local storage
 - Manual refresh plus 60-second auto refresh (on by default, toggleable, paused while the tab is hidden). A failed refresh keeps the last snapshot but flags it as stale
 
