@@ -269,33 +269,24 @@ describe("enrichCandidatesWithMargins", () => {
     expect(usesSpanMarginForReturn(rows[0])).toBe(true);
   });
 
-  it("throws when Kotak and SPAN margins are both unavailable", () => {
-    expect(() =>
-      enrichCandidatesWithMargins(
-        [candidate({ id: "a", netPremium: 3650, calendarDaysLeft: 365 })],
-        [
-          {
-            id: "a",
-            instrumentToken: "123",
-            margin: null,
-            error: "rate_limited",
-            spanMargin: null,
-            spanMarginError: "SPAN snapshot unavailable",
-          },
-        ],
-        24,
-      ),
-    ).toThrow("rate_limited");
-  });
+  it("marks rows unqualified when margins are unavailable", () => {
+    const rows = enrichCandidatesWithMargins(
+      [candidate({ id: "a", netPremium: 3650, calendarDaysLeft: 365 })],
+      [
+        {
+          id: "a",
+          instrumentToken: "123",
+          margin: null,
+          error: "rate_limited",
+          spanMargin: null,
+          spanMarginError: "SPAN snapshot unavailable",
+        },
+      ],
+      24,
+    );
 
-  it("throws when a margin result is null without a usable value", () => {
-    expect(() =>
-      enrichCandidatesWithMargins(
-        [candidate({ id: "a", netPremium: 3650, calendarDaysLeft: 365 })],
-        [{ id: "a", instrumentToken: "123", margin: null }],
-        24,
-      ),
-    ).toThrow("Unable to load margins");
+    expect(rows[0].meetsReturn).toBe(false);
+    expect(rows[0].annualizedReturnPct).toBeNull();
   });
 });
 
@@ -362,7 +353,7 @@ describe("screenCompany margin failures", () => {
     ).rejects.toThrow("Unable to load margins for RELIANCE");
   });
 
-  it("throws when margins are missing from an otherwise ok response", async () => {
+  it("returns no qualifying rows when margins are missing from an otherwise ok response", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -373,17 +364,18 @@ describe("screenCompany margin failures", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(
-      screenCompany({
-        symbol: "RELIANCE",
-        expiryIso: "2026-08-28",
-        spreadMin: 10,
-        returnMin: 24,
-        side: "BOTH",
-        lots: 1,
-        accountId: "prakash",
-      }),
-    ).rejects.toThrow("Unable to load margins for RELIANCE");
+    const result = await screenCompany({
+      symbol: "RELIANCE",
+      expiryIso: "2026-08-28",
+      spreadMin: 10,
+      returnMin: 24,
+      side: "BOTH",
+      lots: 1,
+      accountId: "prakash",
+    });
+
+    expect(result.qualifying).toHaveLength(0);
+    expect(result.candidates[0].meetsReturn).toBeNull();
   });
 
   it("keeps the row when Kotak fails but SPAN margin is present", async () => {

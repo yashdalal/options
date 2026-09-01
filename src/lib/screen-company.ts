@@ -63,20 +63,24 @@ export function enrichCandidatesWithMargins(
     const spanMargin = result.spanMargin ?? null;
     const spanMarginError = result.spanMarginError ?? null;
     const marginForReturn = result.margin ?? spanMargin;
-    if (marginForReturn === null) {
-      throw new Error(
-        result.error ?? spanMarginError ?? "Unable to load margins",
-      );
-    }
-    const annualizedReturnPct = calculateAnnualizedReturnPct(
-      candidate.netPremium,
-      marginForReturn,
-      candidate.calendarDaysLeft,
-    );
+    const annualizedReturnPct =
+      marginForReturn === null
+        ? null
+        : calculateAnnualizedReturnPct(
+            candidate.netPremium,
+            marginForReturn,
+            candidate.calendarDaysLeft,
+          );
     if (annualizedReturnPct === null) {
-      throw new Error(
-        result.error ?? spanMarginError ?? "Unable to load margins",
-      );
+      return {
+        ...candidate,
+        margin: result.margin,
+        spanMargin,
+        spanMarginError:
+          result.error ?? spanMarginError ?? "Unable to load margins",
+        annualizedReturnPct: null,
+        meetsReturn: false,
+      };
     }
     return {
       ...candidate,
@@ -395,14 +399,6 @@ async function loadMarginsForCandidates(
       payload.margins,
       returnMin,
     );
-  }
-
-  const unresolved = marginRows.some((row) => {
-    const match = enriched.find((candidate) => candidate.id === row.id);
-    return match?.margin === null && match?.spanMargin === null;
-  });
-  if (unresolved) {
-    throw new Error(marginFailureMessage);
   }
 
   return enriched;
