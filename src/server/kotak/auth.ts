@@ -42,6 +42,7 @@ export type TradeSessionCredentials = {
   tradingSid: string;
   baseUrl: string;
   neoFinKey: string;
+  serverId?: string;
 };
 
 type ViewSession = {
@@ -118,6 +119,7 @@ async function validateMpin(
     tradingSid: parsed.data.data.sid,
     baseUrl,
     neoFinKey: env.KOTAK_NEO_FIN_KEY,
+    serverId: String(parsed.data.data.hsServerId ?? "").trim() || undefined,
   };
 }
 
