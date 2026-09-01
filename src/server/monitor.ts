@@ -3,8 +3,6 @@ import { buildExpiryGroups } from "@/domain/pairing";
 import { normalizePositions } from "@/domain/positions";
 import type { AccountPositionSummary, MonitorSnapshot } from "@/domain/types";
 import type { TradeSessionCredentials } from "./kotak/auth";
-import { isKotakApiError } from "./kotak/errors";
-import { fetchUsedMargin } from "./kotak/limits";
 import { fetchPositions } from "./kotak/positions";
 import { fetchSpotQuotes } from "./kotak/quotes";
 import {
@@ -12,7 +10,7 @@ import {
   resolveCashInstrument,
 } from "./kotak/scrip-master";
 import { handleBrokerAuthFailure } from "./session";
-import { logInfo, logWarn, safeErrorMessage } from "./logging";
+import { logInfo, logWarn } from "./logging";
 
 let inFlight: Promise<MonitorSnapshot> | null = null;
 let inFlightSessionKey: string | null = null;
@@ -52,22 +50,11 @@ async function buildSnapshot(
   const accountResults = await Promise.all(
     ACCOUNT_DEFINITIONS.map(async (definition) => {
       try {
-        const session = sessions[definition.id];
-        const [rawPositions, margin] = await Promise.all([
-          fetchPositions(session, requestId, definition.id),
-          fetchUsedMargin(session)
-            .catch((error: unknown) => {
-              if (isKotakApiError(error) && error.code === "session_expired") {
-                throw error;
-              }
-              logWarn("Kotak used margin unavailable", {
-                requestId,
-                accountId: definition.id,
-                message: safeErrorMessage(error),
-              });
-              return null;
-            }),
-        ]);
+        const rawPositions = await fetchPositions(
+          sessions[definition.id],
+          requestId,
+          definition.id,
+        );
         const positions = normalizePositions(rawPositions, registry, {
           accountId: definition.id,
           accountLabel: definition.label,
@@ -76,7 +63,6 @@ async function buildSnapshot(
           accountId: definition.id,
           accountLabel: definition.label,
           positions,
-          usedMargin: margin,
         };
       } catch (error) {
         await handleBrokerAuthFailure(sessionId, definition.id, error);
@@ -90,7 +76,6 @@ async function buildSnapshot(
     accountId: result.accountId,
     accountLabel: result.accountLabel,
     optionPositionCount: result.positions.length,
-    usedMargin: result.usedMargin,
   }));
 
   logInfo(`Found ${positions.length} option positions across accounts`);
