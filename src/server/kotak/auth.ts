@@ -42,6 +42,8 @@ export type TradeSessionCredentials = {
   tradingSid: string;
   baseUrl: string;
   neoFinKey: string;
+  /** Kotak hsServerId, required as the sId query param on RMS limits calls. */
+  serverId?: string;
 };
 
 type ViewSession = {
@@ -107,9 +109,9 @@ async function validateMpin(
     throw new KotakApiError("Unexpected validate response", 500, "invalid_response", payload);
   }
 
-  const hasSessionRoute = String(parsed.data.data.hsServerId ?? "").trim().length > 0;
+  const serverId = String(parsed.data.data.hsServerId ?? "").trim();
   const baseUrl = assertApprovedBaseUrl(
-    hasSessionRoute ? parsed.data.data.baseUrl : env.KOTAK_LOGIN_BASE_URL,
+    serverId ? parsed.data.data.baseUrl : env.KOTAK_LOGIN_BASE_URL,
   );
 
   return {
@@ -118,6 +120,7 @@ async function validateMpin(
     tradingSid: parsed.data.data.sid,
     baseUrl,
     neoFinKey: env.KOTAK_NEO_FIN_KEY,
+    serverId: serverId || undefined,
   };
 }
 

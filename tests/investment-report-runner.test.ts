@@ -176,6 +176,7 @@ describe("runInvestmentReport", () => {
 
   it("treats per-company failures as soft and still completes", async () => {
     const controller = new AbortController();
+    const reportedFailures: { symbol: string; message: string }[] = [];
 
     const result = await runInvestmentReport({
       companies: ["AAA", "BBB", "CCC"],
@@ -186,7 +187,7 @@ describe("runInvestmentReport", () => {
       isCurrent: () => true,
       screenCompany: async (symbol) => {
         if (symbol === "BBB") {
-          throw new Error("Unable to screen BBB");
+          throw new Error("Unable to load margins for BBB: SPAN snapshot unavailable");
         }
         return screenResult(symbol, [
           candidate({ id: `${symbol}-1`, company: symbol }),
@@ -195,11 +196,21 @@ describe("runInvestmentReport", () => {
       onProgress: () => {},
       onRows: () => {},
       onCompanyMeta: () => {},
+      onCompanyFailure: (failure) => {
+        reportedFailures.push(failure);
+      },
     });
 
     expect(result.status).toBe("completed");
     expect(result.processed).toBe(3);
     expect(result.failed).toBe(1);
+    expect(result.failures).toEqual([
+      {
+        symbol: "BBB",
+        message: "Unable to load margins for BBB: SPAN snapshot unavailable",
+      },
+    ]);
+    expect(reportedFailures).toEqual(result.failures);
     expect(controller.signal.aborted).toBe(false);
   });
 

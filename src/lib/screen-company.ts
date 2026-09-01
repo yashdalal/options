@@ -332,6 +332,17 @@ export function listExpiriesForSelection(
   return filterExpiriesWithinMonthsAhead(raw, REPORT_EXPIRY_MONTHS_AHEAD, now);
 }
 
+async function readErrorDetail(response: Response): Promise<string | null> {
+  try {
+    const payload = (await response.json()) as { error?: unknown };
+    return typeof payload.error === "string" && payload.error.trim()
+      ? payload.error.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadMarginsForCandidates(
   candidates: ScreenCandidate[],
   accountId: AccountId,
@@ -385,16 +396,27 @@ async function loadMarginsForCandidates(
       } satisfies ScreenCompanyAuthError);
     }
     if (!response.ok) {
-      throw new Error(marginFailureMessage);
+      const detail = await readErrorDetail(response);
+      throw new Error(
+        detail ? `${marginFailureMessage}: ${detail}` : marginFailureMessage,
+      );
     }
     const payload = (await response.json()) as {
       margins: ScreenMarginResult[];
     };
-    enriched = enrichCandidatesWithMargins(
-      enriched,
-      payload.margins,
-      returnMin,
-    );
+    try {
+      enriched = enrichCandidatesWithMargins(
+        enriched,
+        payload.margins,
+        returnMin,
+      );
+    } catch (error) {
+      const detail =
+        error instanceof Error && error.message ? error.message : null;
+      throw new Error(
+        detail ? `${marginFailureMessage}: ${detail}` : marginFailureMessage,
+      );
+    }
   }
 
   const unresolved = marginRows.some((row) => {
@@ -429,7 +451,12 @@ export async function screenCompany(
     } satisfies ScreenCompanyAuthError);
   }
   if (!response.ok) {
-    throw new Error(`Unable to screen ${params.symbol}`);
+    const detail = await readErrorDetail(response);
+    throw new Error(
+      detail
+        ? `Unable to screen ${params.symbol}: ${detail}`
+        : `Unable to screen ${params.symbol}`,
+    );
   }
   const snapshot = (await response.json()) as ScreenSnapshot;
   const candidates = await loadMarginsForCandidates(

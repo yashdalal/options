@@ -75,8 +75,15 @@ Prefer response `ordMrgn` as incremental margin for the checked order (fallbacks
 
 ## RMS used margin
 
-`POST {baseUrl}/quick/user/limits` with form fields `seg=ALL`, `exch=ALL`, and
-`prod=ALL` returns the account's RMS limits. Use the top-level `MarginUsed` field as
+`POST {baseUrl}/quick/user/limits?sId=<hsServerId>` with `Content-Type:
+application/x-www-form-urlencoded` and body field
+`jData={"seg":"ALL","exch":"ALL","prod":"ALL"}` returns the account's RMS limits —
+the same request shape the official Kotak Neo v2 SDK (`limits_api.py` +
+`rest.py`) sends. Bare `seg`/`exch`/`prod` form fields without the `jData` wrapper
+are rejected by the broker. `hsServerId` is captured at MPIN validation and stored
+on the trade session; sessions created before this field existed must reconnect.
+
+Use the top-level `MarginUsed` field as
 the exact broker-reported used margin. Do not substitute
 `MarginUsedPrsnt`, `AmountUtilizedPrsnt`, a `check-margin` field, or the local SPAN
 estimate when `MarginUsed` is absent.

@@ -34,6 +34,7 @@ import {
   aggregateScreenCoverage,
   describeEmptyReportReason,
   runInvestmentReport,
+  type ReportCompanyFailure,
 } from "@/lib/investment-report-runner";
 import {
   filterRowsByThresholds,
@@ -199,6 +200,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   const [coverageByCompany, setCoverageByCompany] = useState<
     Record<string, ScreenCoverage>
   >({});
+  const [companyFailures, setCompanyFailures] = useState<ReportCompanyFailure[]>([]);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [runBasis, setRunBasis] = useState<ReportRunBasis | null>(null);
   const [appliedThresholds, setAppliedThresholds] = useState<ThresholdPair | null>(null);
@@ -482,6 +484,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
 
     setError(null);
     setRows([]);
+    setCompanyFailures([]);
     setPriceRangesByCompany({});
     setPriceRangesErrorByCompany({});
     setBoardMeetingByCompany({});
@@ -527,6 +530,12 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
           return;
         }
         setRows(next);
+      },
+      onCompanyFailure: (failure) => {
+        if (!isCurrent()) {
+          return;
+        }
+        setCompanyFailures((current) => [...current, failure]);
       },
       onCompanyMeta: (companyMeta) => {
         if (!isCurrent()) {
@@ -1210,6 +1219,25 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       {error ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      ) : null}
+
+      {companyFailures.length > 0 ? (
+        <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          <p className="font-semibold">
+            {companyFailures.length === 1
+              ? "1 company failed to screen"
+              : `${companyFailures.length} companies failed to screen`}{" "}
+            — no rows are shown for {companyFailures.length === 1 ? "it" : "them"}:
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {companyFailures.map((failure) => (
+              <li key={failure.symbol}>
+                <span className="font-semibold">{failure.symbol}</span>:{" "}
+                {failure.message}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

@@ -12,11 +12,17 @@ import {
 
 export type ReportTerminalStatus = "completed" | "cancelled" | "error";
 
+export type ReportCompanyFailure = {
+  symbol: string;
+  message: string;
+};
+
 export type ReportRunResult = {
   status: ReportTerminalStatus;
   reason?: "auth" | "unexpected";
   processed: number;
   failed: number;
+  failures: ReportCompanyFailure[];
   rows: InvestmentReportRow[];
 };
 
@@ -100,6 +106,7 @@ export type RunInvestmentReportParams = {
   onProgress: (progress: InvestmentReportProgress) => void;
   onRows: (rows: InvestmentReportRow[]) => void;
   onCompanyMeta: (meta: ReportCompanyMeta) => void;
+  onCompanyFailure?: (failure: ReportCompanyFailure) => void;
   runPool?: typeof defaultRunPool;
 };
 
@@ -151,10 +158,12 @@ export async function runInvestmentReport(
     onProgress,
     onRows,
     onCompanyMeta,
+    onCompanyFailure,
     runPool = defaultRunPool,
   } = params;
 
   const collected: InvestmentReportRow[] = [];
+  const failures: ReportCompanyFailure[] = [];
   let processed = 0;
   let failed = 0;
   let fatalReason: "auth" | "unexpected" | null = null;
@@ -195,6 +204,7 @@ export async function runInvestmentReport(
       reason,
       processed,
       failed,
+      failures,
       rows: collected,
     };
   };
@@ -255,6 +265,17 @@ export async function runInvestmentReport(
             throw err;
           }
           failed += 1;
+          const failure: ReportCompanyFailure = {
+            symbol,
+            message:
+              err instanceof Error && err.message
+                ? err.message
+                : "Screen failed unexpectedly",
+          };
+          failures.push(failure);
+          if (isCurrent()) {
+            onCompanyFailure?.(failure);
+          }
         } finally {
           processed += 1;
           if (isCurrent() && !controller.signal.aborted) {
@@ -279,6 +300,7 @@ export async function runInvestmentReport(
         status: "cancelled",
         processed,
         failed,
+        failures,
         rows: collected,
       };
     }
@@ -295,6 +317,7 @@ export async function runInvestmentReport(
       status: "completed",
       processed,
       failed,
+      failures,
       rows: collected,
     };
   } catch (err) {
@@ -310,6 +333,7 @@ export async function runInvestmentReport(
         status: "cancelled",
         processed,
         failed,
+        failures,
         rows: collected,
       };
     }

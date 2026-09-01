@@ -68,9 +68,19 @@ export async function fetchUsedMargin(
   if (isDemoMode()) {
     return demoFetchUsedMargin(session);
   }
+  if (!session.serverId) {
+    throw new KotakApiError(
+      "Trading session is missing the Kotak server ID for limits — reconnect the account",
+      500,
+      "invalid_response",
+    );
+  }
+
+  const url = new URL(`${session.baseUrl}/quick/user/limits`);
+  url.searchParams.set("sId", session.serverId);
 
   return getKotakRateLimiter().schedule(async () => {
-    const payload = await kotakFetch(`${session.baseUrl}/quick/user/limits`, {
+    const payload = await kotakFetch(url.toString(), {
       method: "POST",
       bodyEncoding: "form",
       headers: {
@@ -79,9 +89,7 @@ export async function fetchUsedMargin(
         "neo-fin-key": session.neoFinKey,
       },
       body: {
-        seg: "ALL",
-        exch: "ALL",
-        prod: "ALL",
+        jData: JSON.stringify({ seg: "ALL", exch: "ALL", prod: "ALL" }),
       },
     });
     return parseUsedMargin(payload);

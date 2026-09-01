@@ -24,6 +24,7 @@ const session: TradeSessionCredentials = {
   tradingSid: "sid",
   baseUrl: "https://example.kotaksecurities.com",
   neoFinKey: "neo",
+  serverId: "server1",
 };
 
 describe("parseUsedMargin", () => {
@@ -53,13 +54,13 @@ describe("fetchUsedMargin", () => {
     kotakFetch.mockReset();
   });
 
-  it("requests all account limits with the trading session", async () => {
+  it("requests all account limits like the Kotak v2 SDK (sId + jData form body)", async () => {
     kotakFetch.mockResolvedValue(limitsFixture);
 
     await expect(fetchUsedMargin(session)).resolves.toBe(286450.75);
 
     expect(kotakFetch).toHaveBeenCalledWith(
-      "https://example.kotaksecurities.com/quick/user/limits",
+      "https://example.kotaksecurities.com/quick/user/limits?sId=server1",
       {
         method: "POST",
         bodyEncoding: "form",
@@ -69,11 +70,16 @@ describe("fetchUsedMargin", () => {
           "neo-fin-key": "neo",
         },
         body: {
-          seg: "ALL",
-          exch: "ALL",
-          prod: "ALL",
+          jData: JSON.stringify({ seg: "ALL", exch: "ALL", prod: "ALL" }),
         },
       },
     );
+  });
+
+  it("fails visibly when the session has no Kotak server ID", async () => {
+    await expect(
+      fetchUsedMargin({ ...session, serverId: undefined }),
+    ).rejects.toThrow("missing the Kotak server ID");
+    expect(kotakFetch).not.toHaveBeenCalled();
   });
 });
