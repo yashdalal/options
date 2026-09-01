@@ -24,7 +24,6 @@ const session: TradeSessionCredentials = {
   tradingSid: "sid",
   baseUrl: "https://example.kotaksecurities.com",
   neoFinKey: "neo",
-  serverId: "server-1",
 };
 
 describe("parseUsedMargin", () => {
@@ -60,7 +59,7 @@ describe("fetchUsedMargin", () => {
     await expect(fetchUsedMargin(session)).resolves.toBe(286450.75);
 
     expect(kotakFetch).toHaveBeenCalledWith(
-      "https://example.kotaksecurities.com/quick/user/limits?sId=server-1",
+      "https://example.kotaksecurities.com/quick/user/limits",
       {
         method: "POST",
         bodyEncoding: "form",
@@ -76,14 +75,5 @@ describe("fetchUsedMargin", () => {
         },
       },
     );
-  });
-
-  it("requires a Kotak server ID on live sessions", async () => {
-    await expect(
-      fetchUsedMargin({
-        ...session,
-        serverId: undefined,
-      }),
-    ).rejects.toThrow("missing the Kotak server ID");
   });
 });
