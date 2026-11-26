@@ -33,7 +33,7 @@ const bodySchema = z.object({
     .max(40),
 });
 
-function errorResponse(error: unknown, requestId: string, fallback: string): Response {
+async function errorResponse(error: unknown, requestId: string, fallback: string): Promise<Response> {
   const status =
     typeof error === "object" &&
     error &&
@@ -100,6 +100,6 @@ export async function POST(request: Request): Promise<Response> {
     );
     return NextResponse.json({ margins });
   } catch (error) {
-    return errorResponse(error, requestId, "Unable to load margins");
+    return await errorResponse(error, requestId, "Unable to load margins");
   }
 }

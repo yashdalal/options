@@ -32,12 +32,12 @@ type ScreenRequestContext = {
   returnMin?: string | null;
 };
 
-function errorResponse(
+async function errorResponse(
   error: unknown,
   requestId: string,
   fallback: string,
   context: ScreenRequestContext = {},
-): Response {
+): Promise<Response> {
   const status =
     typeof error === "object" &&
     error &&
@@ -126,7 +126,7 @@ export async function GET(request: Request): Promise<Response> {
     );
     return NextResponse.json(snapshot);
   } catch (error) {
-    return errorResponse(
+    return await errorResponse(
       error,
       requestId,
       "Unable to load screener snapshot",
