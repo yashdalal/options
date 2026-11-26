@@ -145,7 +145,7 @@ describe("describeEmptyReportReason", () => {
       describeEmptyReportReason(null, [
         { symbol: "MARUTI", message: "Quote batch returned zero items" },
       ]),
-    ).toBe("MARUTI failed: Quote batch returned zero items");
+    ).toBe("MARUTI failed: Quote batch returned zero items.");
   });
 });
 

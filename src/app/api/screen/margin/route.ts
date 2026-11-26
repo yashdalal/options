@@ -58,14 +58,15 @@ function errorResponse(error: unknown, requestId: string, fallback: string): Res
     );
   }
 
+  const message = safeErrorMessage(error) || fallback;
   logError(fallback, {
     requestId,
-    message: safeErrorMessage(error),
+    message,
     name: error instanceof Error ? error.name : "UnknownError",
     code,
     status,
   });
-  return NextResponse.json({ error: fallback, requestId }, { status: 500 });
+  return NextResponse.json({ error: message, requestId }, { status: 500 });
 }
 
 export async function POST(request: Request): Promise<Response> {
