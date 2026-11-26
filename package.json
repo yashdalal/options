@@ -15,7 +15,8 @@
     "verify": "npm run typecheck && npm test && npm run lint && npm run build",
     "probe:kotak": "tsx scripts/probe-kotak.ts",
     "probe:session-store": "tsx scripts/probe-session-store.ts",
-    "probe:span": "tsx scripts/probe-span-margin.ts"
+    "probe:span": "tsx scripts/probe-span-margin.ts",
+    "diagnostics:dump": "tsx scripts/dump-diagnostics.ts"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.0",

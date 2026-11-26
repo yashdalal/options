@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionCookieName } from "@/config/env";
+import { recordDiagnosticEvent } from "@/server/diagnostics";
 import { isKotakApiError } from "@/server/kotak/errors";
 import { logError, safeErrorMessage } from "@/server/logging";
 import { getScreenMargins } from "@/server/screen";
@@ -65,6 +66,12 @@ function errorResponse(error: unknown, requestId: string, fallback: string): Res
     name: error instanceof Error ? error.name : "UnknownError",
     code,
     status,
+  });
+  await recordDiagnosticEvent({
+    kind: "screen_margin",
+    requestId,
+    message,
+    detail: { code, status },
   });
   return NextResponse.json({ error: message, requestId }, { status: 500 });
 }
