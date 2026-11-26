@@ -1,6 +1,11 @@
 import { test, expect } from "@playwright/test";
 
+const demoMode = ["1", "true", "yes"].includes(
+  (process.env.DEMO_MODE ?? "").trim().toLowerCase(),
+);
+
 test("login screen renders without crashing", async ({ page }) => {
+  test.skip(demoMode, "Demo mode auto-connects and skips the login screen");
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Near Expiry Monitor" })).toBeVisible({
     timeout: 15_000,
