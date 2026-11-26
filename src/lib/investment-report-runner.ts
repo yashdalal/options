@@ -12,11 +12,17 @@ import {
 
 export type ReportTerminalStatus = "completed" | "cancelled" | "error";
 
+export type CompanyScreenFailure = {
+  symbol: string;
+  message: string;
+};
+
 export type ReportRunResult = {
   status: ReportTerminalStatus;
   reason?: "auth" | "unexpected";
   processed: number;
   failed: number;
+  failures: CompanyScreenFailure[];
   rows: InvestmentReportRow[];
 };
 
@@ -68,7 +74,13 @@ export function aggregateScreenCoverage(
 
 export function describeEmptyReportReason(
   coverage: AggregatedScreenCoverage | null,
+  failures: CompanyScreenFailure[] = [],
 ): string {
+  if (failures.length > 0 && (!coverage || coverage.companies === 0)) {
+    return failures
+      .map((failure) => `${failure.symbol} failed: ${failure.message}`)
+      .join(" ");
+  }
   if (!coverage || coverage.companies === 0) {
     return "No options meet both min spread and min return %.";
   }
@@ -83,7 +95,31 @@ export function describeEmptyReportReason(
   if (coverage.shown === 0 && coverage.belowSpreadMin > 0) {
     return "Quoted options are below the min spread %.";
   }
+  if (failures.length > 0) {
+    const failureSummary = failures
+      .map((failure) => `${failure.symbol} failed: ${failure.message}`)
+      .join(" ");
+    return `No options meet both min spread and min return %. ${failureSummary}`;
+  }
   return "No options meet both min spread and min return %.";
+}
+
+export function formatCompanyFailureSummary(
+  failures: CompanyScreenFailure[],
+): string {
+  if (failures.length === 0) {
+    return "";
+  }
+  return failures
+    .map((failure) => `${failure.symbol} failed: ${failure.message}`)
+    .join(" ");
+}
+
+function companyFailureMessage(err: unknown, symbol: string): string {
+  if (err instanceof Error && err.message.trim()) {
+    return err.message.trim();
+  }
+  return `Unable to screen ${symbol}`;
 }
 
 export type RunInvestmentReportParams = {
@@ -100,6 +136,7 @@ export type RunInvestmentReportParams = {
   onProgress: (progress: InvestmentReportProgress) => void;
   onRows: (rows: InvestmentReportRow[]) => void;
   onCompanyMeta: (meta: ReportCompanyMeta) => void;
+  onCompanyFailure?: (failure: CompanyScreenFailure) => void;
   runPool?: typeof defaultRunPool;
 };
 
@@ -151,10 +188,12 @@ export async function runInvestmentReport(
     onProgress,
     onRows,
     onCompanyMeta,
+    onCompanyFailure,
     runPool = defaultRunPool,
   } = params;
 
   const collected: InvestmentReportRow[] = [];
+  const failures: CompanyScreenFailure[] = [];
   let processed = 0;
   let failed = 0;
   let fatalReason: "auth" | "unexpected" | null = null;
@@ -195,6 +234,7 @@ export async function runInvestmentReport(
       reason,
       processed,
       failed,
+      failures: [...failures],
       rows: collected,
     };
   };
@@ -255,6 +295,14 @@ export async function runInvestmentReport(
             throw err;
           }
           failed += 1;
+          const failure = {
+            symbol,
+            message: companyFailureMessage(err, symbol),
+          };
+          failures.push(failure);
+          if (isCurrent()) {
+            onCompanyFailure?.(failure);
+          }
         } finally {
           processed += 1;
           if (isCurrent() && !controller.signal.aborted) {
@@ -279,6 +327,7 @@ export async function runInvestmentReport(
         status: "cancelled",
         processed,
         failed,
+        failures: [...failures],
         rows: collected,
       };
     }
@@ -295,6 +344,7 @@ export async function runInvestmentReport(
       status: "completed",
       processed,
       failed,
+      failures: [...failures],
       rows: collected,
     };
   } catch (err) {
@@ -310,6 +360,7 @@ export async function runInvestmentReport(
         status: "cancelled",
         processed,
         failed,
+        failures: [...failures],
         rows: collected,
       };
     }

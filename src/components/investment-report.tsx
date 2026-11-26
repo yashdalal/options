@@ -33,7 +33,9 @@ import {
 import {
   aggregateScreenCoverage,
   describeEmptyReportReason,
+  formatCompanyFailureSummary,
   runInvestmentReport,
+  type CompanyScreenFailure,
 } from "@/lib/investment-report-runner";
 import {
   filterRowsByThresholds,
@@ -199,6 +201,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   const [coverageByCompany, setCoverageByCompany] = useState<
     Record<string, ScreenCoverage>
   >({});
+  const [companyFailures, setCompanyFailures] = useState<CompanyScreenFailure[]>(
+    [],
+  );
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [runBasis, setRunBasis] = useState<ReportRunBasis | null>(null);
   const [appliedThresholds, setAppliedThresholds] = useState<ThresholdPair | null>(null);
@@ -487,6 +492,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     setBoardMeetingByCompany({});
     setBoardMeetingErrorByCompany({});
     setCoverageByCompany({});
+    setCompanyFailures([]);
     setProgress({
       status: "running",
       expiryIso: selectedExpiry,
@@ -562,6 +568,12 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
             [companyMeta.symbol]: companyMeta.coverage!,
           }));
         }
+      },
+      onCompanyFailure: (failure) => {
+        if (!isCurrent()) {
+          return;
+        }
+        setCompanyFailures((current) => [...current, failure]);
       },
     });
 
@@ -688,8 +700,13 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   );
 
   const emptyReportReason = useMemo(
-    () => describeEmptyReportReason(aggregatedCoverage),
-    [aggregatedCoverage],
+    () => describeEmptyReportReason(aggregatedCoverage, companyFailures),
+    [aggregatedCoverage, companyFailures],
+  );
+
+  const failureSummary = useMemo(
+    () => formatCompanyFailureSummary(companyFailures),
+    [companyFailures],
   );
 
   const qualifyingSummary = useMemo(() => {
@@ -725,7 +742,11 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         displayedRows.length === 0
           ? qualifyingSummary
           : `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.`;
-      return `${summary}${elapsedMs === null ? "" : ` Screener took ${formatDuration(elapsedMs)}.`}`;
+      const withFailures =
+        displayedRows.length > 0 && failureSummary
+          ? `${summary} ${failureSummary}`
+          : summary;
+      return `${withFailures}${elapsedMs === null ? "" : ` Screener took ${formatDuration(elapsedMs)}.`}`;
     }
     if (progress.status === "cancelled") {
       return `Stopped after ${progress.processed} companies. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`;
@@ -744,6 +765,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     displayedRows.length,
     elapsedMs,
     expiries.length,
+    failureSummary,
     metaLoading,
     progress.eligible,
     progress.failed,

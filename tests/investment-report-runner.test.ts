@@ -139,6 +139,14 @@ describe("describeEmptyReportReason", () => {
       ),
     ).toBe("No options meet both min spread and min return %.");
   });
+
+  it("surfaces company failures instead of the threshold empty message", () => {
+    expect(
+      describeEmptyReportReason(null, [
+        { symbol: "MARUTI", message: "Quote batch returned zero items" },
+      ]),
+    ).toBe("MARUTI failed: Quote batch returned zero items");
+  });
 });
 
 describe("runInvestmentReport", () => {
@@ -176,6 +184,7 @@ describe("runInvestmentReport", () => {
 
   it("treats per-company failures as soft and still completes", async () => {
     const controller = new AbortController();
+    const reportedFailures: { symbol: string; message: string }[] = [];
 
     const result = await runInvestmentReport({
       companies: ["AAA", "BBB", "CCC"],
@@ -195,11 +204,20 @@ describe("runInvestmentReport", () => {
       onProgress: () => {},
       onRows: () => {},
       onCompanyMeta: () => {},
+      onCompanyFailure: (failure) => {
+        reportedFailures.push(failure);
+      },
     });
 
     expect(result.status).toBe("completed");
     expect(result.processed).toBe(3);
     expect(result.failed).toBe(1);
+    expect(result.failures).toEqual([
+      { symbol: "BBB", message: "Unable to screen BBB" },
+    ]);
+    expect(reportedFailures).toEqual([
+      { symbol: "BBB", message: "Unable to screen BBB" },
+    ]);
     expect(controller.signal.aborted).toBe(false);
   });
 
