@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ACCOUNT_DEFINITIONS, isAccountId, type AccountId } from "../src/config/accounts";
 import { getAccountCredentials } from "../src/config/env";
+import type { ScreenSideFilter } from "../src/domain/types";
+import { normalizePositions } from "../src/domain/positions";
 import { loginWithTotp, logoutSession } from "../src/server/kotak/auth";
 import { checkMargin } from "../src/server/kotak/margin";
 import { fetchPositions } from "../src/server/kotak/positions";
@@ -13,8 +15,8 @@ import {
   loadScripMasterRegistry,
   resolveCashInstrument,
 } from "../src/server/kotak/scrip-master";
-import { normalizePositions } from "../src/domain/positions";
 import { redactValue } from "../src/server/logging";
+import { getScreenMargins, getScreenSnapshot } from "../src/server/screen";
 
 config({ path: ".env.local" });
 config();
@@ -50,11 +52,151 @@ function readAccountId(): AccountId {
   return value;
 }
 
+function readFlag(name: string): string | undefined {
+  const fromArg = process.argv.find((arg) => arg.startsWith(`--${name}=`));
+  return fromArg?.slice(`--${name}=`.length);
+}
+
+function readNumberFlag(name: string, fallback: number): number {
+  const raw = readFlag(name);
+  if (raw === undefined) {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`--${name} must be a number`);
+  }
+  return parsed;
+}
+
+function readSideFlag(): ScreenSideFilter {
+  const raw = (readFlag("side") ?? "BOTH").toUpperCase();
+  if (raw === "CALL" || raw === "PUT" || raw === "BOTH") {
+    return raw;
+  }
+  throw new Error("--side must be CALL, PUT, or BOTH");
+}
+
 function summarizeKeys(value: unknown): string[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return [];
   }
   return Object.keys(value).sort();
+}
+
+async function writeProbeJson(fileName: string, value: unknown): Promise<string> {
+  const outDir = path.join(process.cwd(), ".cache", "probe");
+  await mkdir(outDir, { recursive: true });
+  const filePath = path.join(outDir, fileName);
+  await writeFile(filePath, JSON.stringify(redactValue(value), null, 2), "utf8");
+  return filePath;
+}
+
+async function runScreenerScenario(
+  accountId: AccountId,
+  session: Awaited<ReturnType<typeof loginWithTotp>>,
+): Promise<void> {
+  const symbol = (readFlag("symbol") ?? "").trim().toUpperCase();
+  const expiryIso = (readFlag("expiry") ?? "").trim();
+  if (!symbol || !expiryIso) {
+    throw new Error("Screener probe requires --symbol=TICKER and --expiry=YYYY-MM-DD");
+  }
+
+  const side = readSideFlag();
+  const spreadMin = readNumberFlag("spread", 1);
+  const returnMin = readNumberFlag("return", 1);
+  const lots = Math.max(1, Math.floor(readNumberFlag("lots", 2)));
+  const requestId = `probe-screen-${Date.now()}`;
+  const sessions = {
+    prakash: session,
+    gopa: session,
+    huf: session,
+  } as Record<AccountId, typeof session>;
+  sessions[accountId] = session;
+
+  console.log(
+    `Screening ${symbol} ${side} expiry=${expiryIso} spreadMin=${spreadMin} returnMin=${returnMin} lots=${lots}...`,
+  );
+
+  let snapshot: Awaited<ReturnType<typeof getScreenSnapshot>> | null = null;
+  let snapshotError: string | null = null;
+  try {
+    snapshot = await getScreenSnapshot(
+      sessions,
+      {
+        symbol,
+        expiryIso,
+        spreadMin,
+        returnMin,
+        side,
+        lots,
+      },
+      requestId,
+    );
+  } catch (error) {
+    snapshotError = error instanceof Error ? error.message : String(error);
+    console.error("getScreenSnapshot failed:", snapshotError);
+  }
+
+  const snapshotPath = await writeProbeJson("screen-snapshot.json", {
+    requestId,
+    symbol,
+    expiryIso,
+    side,
+    spreadMin,
+    returnMin,
+    lots,
+    snapshotError,
+    snapshot,
+  });
+  console.log("Wrote", snapshotPath);
+
+  if (!snapshot) {
+    return;
+  }
+
+  const marginItems = snapshot.candidates
+    .filter((row) => row.hasBid && row.premium !== null && row.premium > 0)
+    .slice(0, 40)
+    .map((row) => ({
+      id: row.id,
+      instrumentToken: row.instrumentToken,
+      exchangeSegment: row.exchangeSegment,
+      tradingSymbol: row.tradingSymbol,
+      premium: row.premium as number,
+      quantity: row.lotSize * row.lots,
+      underlying: row.company,
+      expiryIso: row.expiryIso,
+      strike: row.strike,
+      optionType: row.optionType,
+      lots: row.lots,
+      lotSize: row.lotSize,
+    }));
+
+  let margins: Awaited<ReturnType<typeof getScreenMargins>> | null = null;
+  let marginsError: string | null = null;
+  if (marginItems.length > 0) {
+    try {
+      margins = await getScreenMargins(
+        sessions,
+        marginItems,
+        accountId,
+        `${requestId}-margins`,
+      );
+    } catch (error) {
+      marginsError = error instanceof Error ? error.message : String(error);
+      console.error("getScreenMargins failed:", marginsError);
+    }
+  }
+
+  const marginsPath = await writeProbeJson("screen-margins.json", {
+    requestId,
+    symbol,
+    itemCount: marginItems.length,
+    marginsError,
+    margins,
+  });
+  console.log("Wrote", marginsPath);
 }
 
 async function main(): Promise<void> {
@@ -68,6 +210,17 @@ async function main(): Promise<void> {
   console.log(`Authenticating ${account.label}...`);
   const session = await loginWithTotp(account, totp);
   console.log("Trade session established. baseUrl host:", new URL(session.baseUrl).host);
+
+  const screenerSymbol = readFlag("symbol");
+  if (screenerSymbol) {
+    try {
+      await runScreenerScenario(accountId, session);
+    } finally {
+      await logoutSession(session);
+    }
+    console.log("Screener probe complete.");
+    return;
+  }
 
   console.log("Fetching positions...");
   const positions = await fetchPositions(session);
@@ -166,29 +319,19 @@ async function main(): Promise<void> {
     }
   }
 
-  const outDir = path.join(process.cwd(), ".cache", "probe");
-  await mkdir(outDir, { recursive: true });
-  await writeFile(
-    path.join(outDir, "sanitized-summary.json"),
-    JSON.stringify(
-      redactValue({
-        accountId: account.id,
-        accountLabel: account.label,
-        positionCount: positions.length,
-        optionPositionCount: normalized.length,
-        optionUnderlyingCount: listOptionUnderlyings(registry).length,
-        companies,
-        samplePositionKeys: positions[0] ? summarizeKeys(positions[0]) : [],
-        quoteCount: quotes.length,
-        quotesWithSpot: quotes.filter((quote) => quote.spot !== null).length,
-        foQuoteSample,
-        marginSample,
-      }),
-      null,
-      2,
-    ),
-    "utf8",
-  );
+  await writeProbeJson("sanitized-summary.json", {
+    accountId: account.id,
+    accountLabel: account.label,
+    positionCount: positions.length,
+    optionPositionCount: normalized.length,
+    optionUnderlyingCount: listOptionUnderlyings(registry).length,
+    companies,
+    samplePositionKeys: positions[0] ? summarizeKeys(positions[0]) : [],
+    quoteCount: quotes.length,
+    quotesWithSpot: quotes.filter((quote) => quote.spot !== null).length,
+    foQuoteSample,
+    marginSample,
+  });
 
   await logoutSession(session);
   console.log("Probe complete. Summary written to .cache/probe/sanitized-summary.json");
