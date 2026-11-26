@@ -30,10 +30,10 @@ import {
   screenCompany,
   usesSpanMarginForReturn,
 } from "@/lib/screen-company";
+import { ScreenerFailureList } from "@/components/screener-failure-list";
 import {
   aggregateScreenCoverage,
   describeEmptyReportReason,
-  formatCompanyFailureSummary,
   runInvestmentReport,
   type CompanyScreenFailure,
 } from "@/lib/investment-report-runner";
@@ -704,11 +704,6 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     [aggregatedCoverage, companyFailures],
   );
 
-  const failureSummary = useMemo(
-    () => formatCompanyFailureSummary(companyFailures),
-    [companyFailures],
-  );
-
   const qualifyingSummary = useMemo(() => {
     if (displayedRows.length === 0) {
       return emptyReportReason;
@@ -742,11 +737,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
         displayedRows.length === 0
           ? qualifyingSummary
           : `${qualifyingSummary} across ${progress.eligible - progress.failed} companies.`;
-      const withFailures =
-        displayedRows.length > 0 && failureSummary
-          ? `${summary} ${failureSummary}`
-          : summary;
-      return `${withFailures}${elapsedMs === null ? "" : ` Screener took ${formatDuration(elapsedMs)}.`}`;
+      return `${summary}${elapsedMs === null ? "" : ` Screener took ${formatDuration(elapsedMs)}.`}`;
     }
     if (progress.status === "cancelled") {
       return `Stopped after ${progress.processed} companies. ${qualifyingSummary}.${elapsedMs === null ? "" : ` Ran for ${formatDuration(elapsedMs)}.`}`;
@@ -765,7 +756,6 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     displayedRows.length,
     elapsedMs,
     expiries.length,
-    failureSummary,
     metaLoading,
     progress.eligible,
     progress.failed,
@@ -1234,6 +1224,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
           {error}
         </div>
       ) : null}
+
+      <ScreenerFailureList failures={companyFailures} />
 
       <div
         className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}

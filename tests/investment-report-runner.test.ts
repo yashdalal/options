@@ -140,12 +140,12 @@ describe("describeEmptyReportReason", () => {
     ).toBe("No options meet both min spread and min return %.");
   });
 
-  it("surfaces company failures instead of the threshold empty message", () => {
+  it("says no company screened instead of the threshold empty message", () => {
     expect(
       describeEmptyReportReason(null, [
         { symbol: "MARUTI", message: "Quote batch returned zero items" },
       ]),
-    ).toBe("MARUTI failed: Quote batch returned zero items.");
+    ).toBe("No companies screened successfully.");
   });
 });
 

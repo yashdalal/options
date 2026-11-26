@@ -77,7 +77,7 @@ export function describeEmptyReportReason(
   failures: CompanyScreenFailure[] = [],
 ): string {
   if (failures.length > 0 && (!coverage || coverage.companies === 0)) {
-    return formatCompanyFailureSummary(failures);
+    return "No companies screened successfully.";
   }
   if (!coverage || coverage.companies === 0) {
     return "No options meet both min spread and min return %.";
@@ -93,21 +93,7 @@ export function describeEmptyReportReason(
   if (coverage.shown === 0 && coverage.belowSpreadMin > 0) {
     return "Quoted options are below the min spread %.";
   }
-  if (failures.length > 0) {
-    return `No options meet both min spread and min return %. ${formatCompanyFailureSummary(failures)}`;
-  }
   return "No options meet both min spread and min return %.";
-}
-
-export function formatCompanyFailureSummary(
-  failures: CompanyScreenFailure[],
-): string {
-  return failures
-    .map((failure) => {
-      const sentence = `${failure.symbol} failed: ${failure.message}`;
-      return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
-    })
-    .join(" ");
 }
 
 function companyFailureMessage(err: unknown, symbol: string): string {
