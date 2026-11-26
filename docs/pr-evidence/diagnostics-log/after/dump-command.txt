@@ -1,0 +1,4 @@
+$ npm run diagnostics:dump
+Redis is not configured; reading local .cache/diagnostics.jsonl from `npm run dev`.
+Showing 1 diagnostic event(s):
+{"at":"2026-11-26T19:13:22.438Z","kind":"screen_snapshot","requestId":"bd9afb40-b8c5-4b80-97db-e735d88afb50","symbol":"BOSCHLTD","message":"Demo quote failure for BOSCHLTD option quotes (DEMO_FAIL_OPTION_QUOTES)","detail":{"code":"bad_request","status":502,"expiryIso":"2026-11-26","side":"BOTH","spreadMin":"2","returnMin":"1"}}
