@@ -1,0 +1,16 @@
+$ npm run probe:kotak -- --symbol=MARUTI --side=CALL
+Screener probe requires --symbol=TICKER and --expiry=YYYY-MM-DD
+
+$ npm run probe:kotak -- --symbol=MARUTI --side=SIDEWAYS --expiry=2026-12-29
+--side must be CALL, PUT, or BOTH
+
+$ npm run probe:kotak -- --symbol=MARUTI --side=CALL --spread=1 --return=1 --lots=2 --expiry=2026-12-29 (no TOTP available)
+Screener scenario: {
+  symbol: 'MARUTI',
+  expiryIso: '2026-12-29',
+  side: 'CALL',
+  spreadMin: 1,
+  returnMin: 1,
+  lots: 2
+}
+Enter current TOTP: TOTP must be a 6-digit code

@@ -92,20 +92,41 @@ async function writeProbeJson(fileName: string, value: unknown): Promise<string>
   return filePath;
 }
 
+type ScreenerScenario = {
+  symbol: string;
+  expiryIso: string;
+  side: ScreenSideFilter;
+  spreadMin: number;
+  returnMin: number;
+  lots: number;
+};
+
+function readScreenerScenario(): ScreenerScenario | null {
+  const symbolFlag = readFlag("symbol");
+  if (symbolFlag === undefined) {
+    return null;
+  }
+  const symbol = symbolFlag.trim().toUpperCase();
+  const expiryIso = (readFlag("expiry") ?? "").trim();
+  if (!symbol || !/^\d{4}-\d{2}-\d{2}$/.test(expiryIso)) {
+    throw new Error("Screener probe requires --symbol=TICKER and --expiry=YYYY-MM-DD");
+  }
+  return {
+    symbol,
+    expiryIso,
+    side: readSideFlag(),
+    spreadMin: readNumberFlag("spread", 1),
+    returnMin: readNumberFlag("return", 1),
+    lots: Math.max(1, Math.floor(readNumberFlag("lots", 2))),
+  };
+}
+
 async function runScreenerScenario(
   accountId: AccountId,
   session: Awaited<ReturnType<typeof loginWithTotp>>,
+  scenario: ScreenerScenario,
 ): Promise<void> {
-  const symbol = (readFlag("symbol") ?? "").trim().toUpperCase();
-  const expiryIso = (readFlag("expiry") ?? "").trim();
-  if (!symbol || !expiryIso) {
-    throw new Error("Screener probe requires --symbol=TICKER and --expiry=YYYY-MM-DD");
-  }
-
-  const side = readSideFlag();
-  const spreadMin = readNumberFlag("spread", 1);
-  const returnMin = readNumberFlag("return", 1);
-  const lots = Math.max(1, Math.floor(readNumberFlag("lots", 2)));
+  const { symbol, expiryIso, side, spreadMin, returnMin, lots } = scenario;
   const requestId = `probe-screen-${Date.now()}`;
   const sessions = {
     prakash: session,
@@ -201,6 +222,10 @@ async function runScreenerScenario(
 
 async function main(): Promise<void> {
   const accountId = readAccountId();
+  const scenario = readScreenerScenario();
+  if (scenario) {
+    console.log("Screener scenario:", scenario);
+  }
   const account = getAccountCredentials(accountId);
   const totp = await readTotp();
   if (!/^\d{6}$/.test(totp)) {
@@ -211,10 +236,9 @@ async function main(): Promise<void> {
   const session = await loginWithTotp(account, totp);
   console.log("Trade session established. baseUrl host:", new URL(session.baseUrl).host);
 
-  const screenerSymbol = readFlag("symbol");
-  if (screenerSymbol) {
+  if (scenario) {
     try {
-      await runScreenerScenario(accountId, session);
+      await runScreenerScenario(accountId, session, scenario);
     } finally {
       await logoutSession(session);
     }

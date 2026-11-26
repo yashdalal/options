@@ -1,0 +1,2 @@
+$ npm run probe:kotak -- --symbol=MARUTI --side=CALL (no TOTP available)
+Enter current TOTP: TOTP must be a 6-digit code
