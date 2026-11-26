@@ -19,16 +19,25 @@ Every change in this repo ships as a small PR that has been practically tested. 
 Copy this checklist into your working notes and complete it for each branch:
 
 ```
+- [ ] Captured BEFORE evidence of the current behavior, before editing
 - [ ] npm run verify            (typecheck, unit tests, lint, build)
 - [ ] npm run test:e2e:demo     (app loads; Near Expiry and Screener work in demo mode)
 - [ ] Exercised the actual change (see the table below) and wrote down what I saw
-- [ ] UI change: before/after screenshots in docs/pr-evidence/<slug>/{before,after}/
+- [ ] Captured AFTER evidence of the same view or command in docs/pr-evidence/<slug>/{before,after}/
 - [ ] Live-only behavior: marked "Needs live verification" and listed the exact steps
 ```
 
+Before/after proof is required for every PR (see `.cursor/rules/ui-evidence-screenshots.mdc`):
+
+- Images by default.
+- Video only when a still can't show the behavior: scrolling or sticky layout, timing, or multi-step flows. Use `CAPTURE_VIDEO_DIR=<dir> node scripts/capture-screener-run.mjs …` or Playwright `recordVideo`.
+- Terminal output for non-visual changes.
+
+Capture the before evidence first. It is easy to lose once the code changes. Only one `next dev` can run per checkout, so stop it and restart it with different env vars when switching between before and after setups.
+
 | Change type | Practical test |
 |---|---|
-| UI or copy | Run `npm run dev` with `DEMO_MODE=1`, click through the changed view, and capture before/after (see `.cursor/rules/ui-evidence-screenshots.mdc`) |
+| UI or copy | Run `npm run dev` with `DEMO_MODE=1` and click through the changed view |
 | Server logic that demo data covers | Call the route or click the flow in demo mode and confirm the output |
 | Error paths | Force the failure in demo mode (for example `DEMO_FAIL_OPTION_QUOTES=<SYMBOL>` once it exists) and confirm the UI shows it |
 | Kotak behavior demo can't reproduce (quotes, margins, limits, auth) | Run the demo checks above, then verify live with `npm run probe:kotak` during Indian market hours (9:15–15:30 IST) using TOTPs from the user. Don't merge before that |
@@ -48,8 +57,8 @@ If a check fails, fix it or report it. Never open a PR while hiding a failed or 
 - `npm run test:e2e:demo` — pass
 - <exact manual steps and what I observed>
 
-## Evidence
-<before/after images, or "not a UI change">
+## Before / after
+<embedded before and after images (or a video link, or terminal output); if not capturable, say why>
 
 ## Needs live verification
 <steps for a live Kotak session, or "none">

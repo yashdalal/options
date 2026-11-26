@@ -1,17 +1,19 @@
 ---
-description: Require before/after screenshots (with PR id) for UI changes
+description: Every PR needs before/after proof — images by default, video when a still can't show it
 alwaysApply: true
 ---
 
-# UI evidence — before/after screenshots
+# Before/after proof on every PR
 
-When changing user-visible UI (layout, styling, copy, sticky/scroll behavior, tables, trays, nav):
+Every PR shows what changed with **before** and **after** evidence captured from the running app or tool, not just a description.
 
-1. **Before** — capture screenshots (or a short video) of the current UI in the broken/prior state before editing.
-2. **After** — capture the same views after the fix.
-3. Prefer **demo mode** (`DEMO_MODE=1`) when live broker data is not required.
-4. Store evidence under `docs/pr-evidence/<issue-or-slug>/{before,after}/` as compressed JPEG when possible.
-5. After the PR exists, **label evidence with the PR number** (filename and/or on-image badge, e.g. `PR #57`) and link those files in the PR body.
-6. Include before/after images in the PR description — do not ship UI-only PRs without visual proof unless capture is impossible (then say why).
+1. **Before**: capture the current behavior (the bug, or the missing feature) before editing.
+2. **After**: capture the same view, run, or command after the change.
+3. **Format, in order of preference:**
+   - **Images (default).** Screenshots of the affected view. Prefer demo mode (`DEMO_MODE=1`); use `DEMO_FAIL_OPTION_QUOTES=<SYMBOL>` to show error paths. `node scripts/capture-screener-run.mjs` can drive the screener.
+   - **Video (rarely).** Use it only when a still can't show the behavior: scrolling or sticky layout, auto-refresh or timing, or multi-step interactions. Keep clips under ~30s. Set `CAPTURE_VIDEO_DIR=<dir>` on the capture script, or use Playwright `recordVideo`.
+   - **Terminal output.** For non-visual changes (scripts, logging, server-only), paste before/after command output in the PR body, or save it as a `.txt` file next to the images.
+4. Store evidence under `docs/pr-evidence/<slug>/{before,after}/`, as compressed JPEG when possible. Once the PR exists, label the evidence with the PR number (in the filename or as an on-image badge, e.g. `PR #57`) and embed or link it in the PR body.
+5. If before/after truly can't be captured (docs-only PRs, or a change that needs live Kotak data you don't have yet), say why in the PR body. For live-only changes, add the evidence after the live verification session and before merge.
 
-Do not skip this for “small” UI tweaks that change layout or scroll/sticky behavior.
+Do not skip this for "small" changes.
