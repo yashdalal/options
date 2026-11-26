@@ -64,6 +64,7 @@ To exercise the UI without Kotak credentials or upstream APIs, set `DEMO_MODE=1`
 | `SESSION_COOKIE_NAME` | Session cookie name |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Session and SPAN cache store. `KV_REST_API_URL` / `KV_REST_API_TOKEN` also accepted |
 | `DEMO_MODE` | Set to `1` locally to bypass TOTP and use synthetic data (disabled in production) |
+| `DEMO_FAIL_OPTION_QUOTES` | Demo only: comma-separated symbols (e.g. `BOSCHLTD`) whose option quotes fail, to exercise screener error handling |
 
 `<ACCOUNT>` is `PRAKASH`, `GOPA`, or `HUF`.
 

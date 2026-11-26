@@ -385,7 +385,9 @@ async function loadMarginsForCandidates(
       } satisfies ScreenCompanyAuthError);
     }
     if (!response.ok) {
-      throw new Error(marginFailureMessage);
+      throw new Error(
+        await readErrorMessage(response, marginFailureMessage),
+      );
     }
     const payload = (await response.json()) as {
       margins: ScreenMarginResult[];
@@ -406,6 +408,21 @@ async function loadMarginsForCandidates(
   }
 
   return enriched;
+}
+
+async function readErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const payload = (await response.json()) as { error?: unknown };
+    if (typeof payload.error === "string" && payload.error.trim()) {
+      return payload.error.trim();
+    }
+  } catch {
+    // Keep the fallback when the body is missing or not JSON.
+  }
+  return fallback;
 }
 
 export async function screenCompany(
@@ -429,7 +446,9 @@ export async function screenCompany(
     } satisfies ScreenCompanyAuthError);
   }
   if (!response.ok) {
-    throw new Error(`Unable to screen ${params.symbol}`);
+    throw new Error(
+      await readErrorMessage(response, `Unable to screen ${params.symbol}`),
+    );
   }
   const snapshot = (await response.json()) as ScreenSnapshot;
   const candidates = await loadMarginsForCandidates(

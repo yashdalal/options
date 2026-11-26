@@ -30,10 +30,12 @@ import {
   screenCompany,
   usesSpanMarginForReturn,
 } from "@/lib/screen-company";
+import { ScreenerFailureList } from "@/components/screener-failure-list";
 import {
   aggregateScreenCoverage,
   describeEmptyReportReason,
   runInvestmentReport,
+  type CompanyScreenFailure,
 } from "@/lib/investment-report-runner";
 import {
   filterRowsByThresholds,
@@ -199,6 +201,9 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   const [coverageByCompany, setCoverageByCompany] = useState<
     Record<string, ScreenCoverage>
   >({});
+  const [companyFailures, setCompanyFailures] = useState<CompanyScreenFailure[]>(
+    [],
+  );
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [runBasis, setRunBasis] = useState<ReportRunBasis | null>(null);
   const [appliedThresholds, setAppliedThresholds] = useState<ThresholdPair | null>(null);
@@ -487,6 +492,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
     setBoardMeetingByCompany({});
     setBoardMeetingErrorByCompany({});
     setCoverageByCompany({});
+    setCompanyFailures([]);
     setProgress({
       status: "running",
       expiryIso: selectedExpiry,
@@ -562,6 +568,12 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
             [companyMeta.symbol]: companyMeta.coverage!,
           }));
         }
+      },
+      onCompanyFailure: (failure) => {
+        if (!isCurrent()) {
+          return;
+        }
+        setCompanyFailures((current) => [...current, failure]);
       },
     });
 
@@ -688,8 +700,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
   );
 
   const emptyReportReason = useMemo(
-    () => describeEmptyReportReason(aggregatedCoverage),
-    [aggregatedCoverage],
+    () => describeEmptyReportReason(aggregatedCoverage, companyFailures),
+    [aggregatedCoverage, companyFailures],
   );
 
   const qualifyingSummary = useMemo(() => {
@@ -1212,6 +1224,8 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
           {error}
         </div>
       ) : null}
+
+      <ScreenerFailureList failures={companyFailures} />
 
       <div
         className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${running ? "opacity-90" : ""}`}

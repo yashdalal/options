@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSessionCookieName } from "@/config/env";
 import type { ScreenSideFilter } from "@/domain/types";
+import { recordDiagnosticEvent } from "@/server/diagnostics";
 import { isKotakApiError } from "@/server/kotak/errors";
 import { logError, safeErrorMessage } from "@/server/logging";
 import { getScreenSnapshot } from "@/server/screen";
@@ -23,7 +24,20 @@ function parseSide(value: string | null): ScreenSideFilter {
   return "BOTH";
 }
 
-function errorResponse(error: unknown, requestId: string, fallback: string): Response {
+type ScreenRequestContext = {
+  symbol?: string;
+  expiryIso?: string;
+  side?: string;
+  spreadMin?: string | null;
+  returnMin?: string | null;
+};
+
+async function errorResponse(
+  error: unknown,
+  requestId: string,
+  fallback: string,
+  context: ScreenRequestContext = {},
+): Promise<Response> {
   const status =
     typeof error === "object" &&
     error &&
@@ -49,25 +63,47 @@ function errorResponse(error: unknown, requestId: string, fallback: string): Res
     );
   }
 
+  const message = safeErrorMessage(error) || fallback;
   logError(fallback, {
     requestId,
-    message: safeErrorMessage(error),
+    message,
     name: error instanceof Error ? error.name : "UnknownError",
     code,
     status,
   });
-  return NextResponse.json({ error: fallback, requestId }, { status: 500 });
+  await recordDiagnosticEvent({
+    kind: "screen_snapshot",
+    requestId,
+    symbol: context.symbol,
+    message,
+    detail: {
+      code,
+      status,
+      expiryIso: context.expiryIso,
+      side: context.side,
+      spreadMin: context.spreadMin,
+      returnMin: context.returnMin,
+    },
+  });
+  return NextResponse.json({ error: message, requestId }, { status: 500 });
 }
 
 export async function GET(request: Request): Promise<Response> {
   const requestId = randomUUID();
+  const url = new URL(request.url);
+  const symbol = (url.searchParams.get("symbol") ?? "").trim().toUpperCase();
+  const expiryIso = (url.searchParams.get("expiry") ?? "").trim();
+  const requestContext: ScreenRequestContext = {
+    symbol,
+    expiryIso,
+    side: url.searchParams.get("side") ?? undefined,
+    spreadMin: url.searchParams.get("spreadMin"),
+    returnMin: url.searchParams.get("returnMin"),
+  };
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get(getSessionCookieName())?.value;
     const sessions = await requireConnectedAccounts(sessionId);
-    const url = new URL(request.url);
-    const symbol = (url.searchParams.get("symbol") ?? "").trim().toUpperCase();
-    const expiryIso = (url.searchParams.get("expiry") ?? "").trim();
     if (!symbol || !expiryIso) {
       return NextResponse.json(
         { error: "symbol and expiry are required", requestId },
@@ -90,6 +126,11 @@ export async function GET(request: Request): Promise<Response> {
     );
     return NextResponse.json(snapshot);
   } catch (error) {
-    return errorResponse(error, requestId, "Unable to load screener snapshot");
+    return await errorResponse(
+      error,
+      requestId,
+      "Unable to load screener snapshot",
+      requestContext,
+    );
   }
 }

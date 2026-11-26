@@ -30,6 +30,7 @@ import {
   emptyPriceRanges,
   fetchUnderlyingPriceRanges,
 } from "./market-data/yahoo-history";
+import { recordDiagnosticEvent } from "./diagnostics";
 import { logInfo } from "./logging";
 import { handleBrokerAuthFailure } from "./session";
 import { calculateSingleLegSpanMargins } from "./span/service";
@@ -403,11 +404,24 @@ export async function getScreenMargins(
           ) {
             await handleBrokerAuthFailure(sessionId, resolvedAccountId, error);
           }
+          const message =
+            error instanceof Error ? error.message : "margin_failed";
+          void recordDiagnosticEvent({
+            kind: "screen_margin",
+            requestId,
+            symbol: item.underlying,
+            accountId: resolvedAccountId,
+            message,
+            detail: {
+              instrumentToken: item.instrumentToken,
+              tradingSymbol: item.tradingSymbol,
+            },
+          });
           return {
             id: item.id,
             instrumentToken: item.instrumentToken,
             margin: null,
-            error: error instanceof Error ? error.message : "margin_failed",
+            error: message,
           };
         }
       }),

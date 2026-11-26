@@ -4,6 +4,7 @@ import {
   demoFetchSpotQuotes,
 } from "@/server/demo/adapters/quotes";
 import { isDemoMode } from "@/server/demo/mode";
+import { recordDiagnosticEvent } from "@/server/diagnostics";
 import { kotakFetch } from "./client";
 import { detectBrokerFailure } from "./broker-response";
 import { KotakApiError } from "./errors";
@@ -284,6 +285,14 @@ async function fetchQuoteBatch(
 
   const failure = detectBrokerFailure(payload);
   if (failure) {
+    void recordDiagnosticEvent({
+      kind: "quote_batch",
+      message: failure.message || "Quote request failed",
+      detail: {
+        requestedCount: batch.length,
+        tokens: batch.map((item) => `${item.exchangeSegment}|${item.instrumentToken}`),
+      },
+    });
     throw new KotakApiError(
       failure.message || "Quote request failed",
       502,
@@ -296,6 +305,14 @@ async function fetchQuoteBatch(
   const matchedKeys = new Set<string>();
   const items = extractItems(payload);
   if (items.length === 0) {
+    void recordDiagnosticEvent({
+      kind: "quote_empty_batch",
+      message: "Quote batch returned zero items",
+      detail: {
+        requestedCount: batch.length,
+        tokens: batch.map((item) => `${item.exchangeSegment}|${item.instrumentToken}`),
+      },
+    });
     return [];
   }
   for (const item of items) {

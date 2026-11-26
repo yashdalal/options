@@ -4,9 +4,13 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# UI changes need before/after evidence
+# Ship small, practically tested PRs
 
-For user-visible UI work, capture **before** and **after** screenshots (or a short video), preferably in demo mode. Put them under `docs/pr-evidence/…`, label them with the PR number once it exists, and embed them in the PR body. See `.cursor/rules/ui-evidence-screenshots.mdc`.
+Every change goes out as a small, single-purpose PR that has been tested in the running app, not just unit-tested. Follow `.cursor/skills/ship-small-pr/SKILL.md`. At a minimum, run `npm run verify` and `npm run test:e2e:demo`, and exercise the changed behavior in the UI. Anything that only live Kotak data can prove stays a draft PR until it has been verified live.
+
+# Every PR needs before/after proof
+
+Capture **before** and **after** evidence for every PR, preferably in demo mode. Use images by default, a short video only when a still can't show the behavior (scrolling, timing, multi-step flows), and terminal output for non-visual changes. Put the evidence under `docs/pr-evidence/…`, label it with the PR number once it exists, and embed it in the PR body. See `.cursor/rules/ui-evidence-screenshots.mdc`.
 
 # Fail visibly — never paper over bad data
 

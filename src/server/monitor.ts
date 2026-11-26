@@ -9,6 +9,7 @@ import {
   loadScripMasterRegistry,
   resolveCashInstrument,
 } from "./kotak/scrip-master";
+import { recordDiagnosticEvent, diagnosticMessageFromError } from "./diagnostics";
 import { handleBrokerAuthFailure } from "./session";
 import { logInfo, logWarn } from "./logging";
 
@@ -65,6 +66,13 @@ async function buildSnapshot(
           positions,
         };
       } catch (error) {
+        await recordDiagnosticEvent({
+          kind: "monitor",
+          requestId,
+          accountId: definition.id,
+          message: diagnosticMessageFromError(error),
+          detail: { step: "positions" },
+        });
         await handleBrokerAuthFailure(sessionId, definition.id, error);
         throw error;
       }
@@ -117,6 +125,12 @@ async function buildSnapshot(
       })),
     );
   } catch (error) {
+    await recordDiagnosticEvent({
+      kind: "monitor",
+      requestId,
+      message: diagnosticMessageFromError(error),
+      detail: { step: "spot_quotes", instrumentCount: instruments.length },
+    });
     await handleBrokerAuthFailure(sessionId, ACCOUNT_DEFINITIONS[0].id, error);
     throw error;
   }
