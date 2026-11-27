@@ -388,14 +388,24 @@ export function BasketTray({
               ? "Updating margin…"
               : formatSpanLabel(result.spanFile.date, result.spanFile.variant)}
           </span>
-          <button
-            type="button"
-            onClick={() => void refreshSpan()}
-            disabled={refreshing || loading}
-            className="text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-950 disabled:opacity-60"
-          >
-            {refreshing ? "Refreshing…" : "Refresh file"}
-          </button>
+          <span className="flex items-center gap-3">
+            <a
+              href="/methodology"
+              target="_blank"
+              rel="noopener"
+              className="hover:text-zinc-800"
+            >
+              How it&apos;s calculated
+            </a>
+            <button
+              type="button"
+              onClick={() => void refreshSpan()}
+              disabled={refreshing || loading}
+              className="text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-950 disabled:opacity-60"
+            >
+              {refreshing ? "Refreshing…" : "Refresh file"}
+            </button>
+          </span>
         </div>
         {result.deliveryMarginWarning ? (
           <div className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">
