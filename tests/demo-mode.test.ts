@@ -49,6 +49,17 @@ describe("demo mode", () => {
     vi.unstubAllEnvs();
   });
 
+  it("never connects to Redis in demo mode, even when production keys are present", async () => {
+    process.env.KV_REST_API_URL = "https://example.upstash.io";
+    process.env.KV_REST_API_TOKEN = "token";
+    const { getRedis, isRedisConfigured } = await import("@/server/redis");
+    expect(isRedisConfigured()).toBe(true);
+
+    process.env.DEMO_MODE = "1";
+    expect(isRedisConfigured()).toBe(false);
+    expect(getRedis()).toBeNull();
+  });
+
   it("seeds a ready demo session without TOTP", async () => {
     process.env.DEMO_MODE = "1";
     resetEnvCacheForTests();

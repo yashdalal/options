@@ -1,0 +1,12 @@
+BEFORE (2026-11-26 22:05 ET): a local DEMO_MODE=1 dev server, with .env.local holding the production
+Upstash keys, overwrote the shared SPAN snapshot in production Redis:
+  live SPAN manifest: 20261127 demo 4      (underlyings: ASHOKLEY, BOSCHLTD, M&M, SBIN)
+Production basket then failed for every real symbol: "Unmapped SPAN contracts: NIFTY:underlying",
+and every screener row showed "SPAN unavailable".
+
+Restored by refreshing the real NSE file:
+  live SPAN manifest: 20261127 i1 247 2026-11-27T03:48:47.674Z
+
+AFTER (this branch): npm run test:e2e:demo with the same production keys in .env.local
+  2 passed, 1 skipped
+  live SPAN manifest: 20261127 i1 247 2026-11-27T03:48:47.674Z   (unchanged)
