@@ -77,6 +77,28 @@ describe("span parse + engine", () => {
     expect(straddle.total).toBe(straddle.span + straddle.exposure);
   });
 
+  it("charges exposure on spot × qty, not strike × qty, for short options", async () => {
+    const parsed = await parseSpnStream(fixturePath);
+    const testco = parsed.underlyings.get("TESTCO")!;
+    const underlyings = new Map([["TESTCO", { ...testco, spot: 125 }]]);
+
+    const shortPut = computePortfolioMargin(
+      [
+        {
+          underlying: "TESTCO",
+          instrumentType: "OPT",
+          optionType: "PUT",
+          expiryIso: "2026-07-28",
+          strike: 100,
+          quantity: -100,
+        },
+      ],
+      underlyings,
+    );
+
+    expect(shortPut.exposure).toBeCloseTo(0.035 * 125 * 100, 6);
+  });
+
   it("decodes HTML entities in SPAN pfCode symbols", async () => {
     const parsed = await parseSpnStream(fixturePath);
     expect(parsed.underlyings.has("GVT&D")).toBe(true);
