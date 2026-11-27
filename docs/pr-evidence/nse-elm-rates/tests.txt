@@ -1,0 +1,5 @@
+ RUN  v4.1.10 /Users/yashdalal/options
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  23:25:57
+   Duration  145ms (transform 38ms, setup 0ms, import 54ms, tests 3ms, environment 0ms)

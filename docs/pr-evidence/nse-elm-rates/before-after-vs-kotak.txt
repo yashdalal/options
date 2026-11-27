@@ -1,0 +1,13 @@
+SPAN file 20261127-i1, NSE ELM file 20261127, 577 HUF samples (gap = (estimate - Kotak) / Kotak)
+
+underlying     n   before median (worst)     after median (worst)   NSE ELM normal / deep-OTM
+BANKNIFTY    100     -0.1% (  -0.2%)        -0.1% (  -0.2%)     index 2% / 3%
+HDFCBANK      37      0.0% (   0.1%)         0.0% (   0.1%)     3.5% / 5.25%
+IDFCFIRSTB    37    -55.8% ( -73.8%)        -1.5% (  -2.0%)     18.5% / 20.25%
+INFY          40     -0.0% (  -0.0%)        -0.0% (  -0.0%)     3.5% / 5.25%
+KOTAKBANK     24     -0.0% (  -0.0%)        -0.0% (  -0.0%)     3.5% / 5.25%
+MARUTI        40     -0.0% (  -0.0%)        -0.0% (  -0.0%)     3.5% / 5.25%
+NIFTY         98     -0.0% (  -0.0%)        -0.0% (  -0.0%)     index 2% / 3%
+RELIANCE      55     -0.0% (  -0.0%)        -0.0% (  -0.0%)     3.5% / 5.25%
+SBIN          46     -0.2% (  -0.6%)        -0.2% (  -0.6%)     3.5% / 5.25%
+SENSEX       100     -0.0% (  -0.0%)        -0.0% (  -0.0%)     index 2% / 3%

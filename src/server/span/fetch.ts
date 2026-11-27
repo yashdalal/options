@@ -6,7 +6,9 @@ import { unzipSync } from "fflate";
 import { demoRefreshSpanSnapshot } from "@/server/demo/adapters/span";
 import { isDemoMode } from "@/server/demo/mode";
 import { logInfo, logWarn } from "../logging";
+import { fetchLatestElmRates } from "./elm";
 import { SpanError } from "./errors";
+import { DEFAULT_EXPOSURE_SOURCE } from "./exposure";
 import { parseSpnStream } from "./parse";
 import { writeSpanSnapshot } from "./store";
 import type { SpanSnapshotMeta } from "./types";
@@ -195,11 +197,27 @@ export async function refreshSpanSnapshot(options?: {
     if (parsed.underlyings.size === 0) {
       throw new SpanError("SPAN parse produced zero underlyings", 500, "span_empty");
     }
+    const elmFile = await fetchLatestElmRates(latest.date);
+    if (elmFile) {
+      for (const [symbol, underlying] of parsed.underlyings) {
+        const rates = elmFile.rates.get(symbol);
+        if (rates) {
+          underlying.elm = rates;
+        }
+      }
+    } else {
+      logWarn("NSE ELM file unavailable; using default exposure rates", {
+        spanDate: latest.date,
+      });
+    }
     const meta = await writeSpanSnapshot(
       {
         date: latest.date,
         variant: latest.variant,
         created: parsed.created,
+        exposureSource: elmFile
+          ? `nse_ael_${elmFile.date}`
+          : DEFAULT_EXPOSURE_SOURCE,
       },
       parsed.underlyings,
     );
@@ -207,6 +225,7 @@ export async function refreshSpanSnapshot(options?: {
       date: meta.date,
       variant: meta.variant,
       underlyingCount: meta.underlyingCount,
+      exposureSource: meta.exposureSource,
     });
     return meta;
   } catch (error) {

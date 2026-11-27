@@ -5,7 +5,6 @@ import {
   mergePositions,
 } from "./engine";
 import { SpanError, isSpanError } from "./errors";
-import { EXPOSURE_SOURCE } from "./exposure";
 import { refreshSpanSnapshot } from "./fetch";
 import {
   basketLegsToSpanPositions,
@@ -120,7 +119,7 @@ export async function calculateBasketMargin(input: {
     spanFile: {
       date: loaded.meta.date,
       variant: loaded.meta.variant,
-      exposureSource: EXPOSURE_SOURCE,
+      exposureSource: loaded.meta.exposureSource,
     },
     basket,
     account,

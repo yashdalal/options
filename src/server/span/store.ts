@@ -3,7 +3,7 @@ import { getRedis, isRedisConfigured } from "../redis";
 import { logWarn } from "../logging";
 import { normalizeSpanSymbol } from "./parse";
 import type { SpanSnapshotMeta, SpanUnderlying } from "./types";
-import { EXPOSURE_SOURCE } from "./exposure";
+import { DEFAULT_EXPOSURE_SOURCE } from "./exposure";
 
 const MANIFEST_KEY = "near-expiry:span:manifest";
 const BLOB_KEY = "near-expiry:span:blob";
@@ -85,6 +85,7 @@ export async function writeSpanSnapshot(
     "exposureSource" | "fetchedAt" | "underlyingCount" | "underlyings"
   > & {
     created?: string;
+    exposureSource?: string;
   },
   underlyings: Map<string, SpanUnderlying>,
 ): Promise<SpanSnapshotMeta> {
@@ -96,7 +97,7 @@ export async function writeSpanSnapshot(
     fetchedAt: new Date().toISOString(),
     underlyingCount: canonical.size,
     underlyings: [...canonical.keys()].sort(),
-    exposureSource: EXPOSURE_SOURCE,
+    exposureSource: meta.exposureSource ?? DEFAULT_EXPOSURE_SOURCE,
   };
 
   const redis = getRedis();

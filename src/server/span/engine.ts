@@ -152,7 +152,7 @@ function exposureFor(
     if (row.contract.instrumentType === "OPT" && row.quantity >= 0) {
       continue;
     }
-    const rate = exposureRate(underlying.symbol, row.contract.instrumentType);
+    const rate = exposureRate(underlying, row.contract);
     total +=
       rate *
       notionalValue({
