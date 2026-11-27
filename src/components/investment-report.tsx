@@ -1211,6 +1211,16 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
                       vs Kotak. If Kotak fails, SPAN is used for ann. return and the return
                       cell shows a warning icon.
                     </dd>
+                    <dd className="text-xs">
+                      <a
+                        href="/methodology"
+                        target="_blank"
+                        rel="noopener"
+                        className="text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-950"
+                      >
+                        How the SPAN + ELM estimate is calculated and checked
+                      </a>
+                    </dd>
                   </div>
                 </dl>
               </section>
