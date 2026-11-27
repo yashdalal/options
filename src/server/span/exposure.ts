@@ -23,17 +23,11 @@ export function exposureRate(
   return isIndexUnderlying(symbol) ? 0.02 : 0.035;
 }
 
+/** Options and futures both use the underlying price: Kotak's check-margin ELM is a flat rate of spot × qty at every strike. */
 export function notionalValue(params: {
   quantity: number;
   underlyingPrice: number;
-  strike?: number;
-  instrumentType: "OPT" | "FUT";
   cvf?: number;
 }): number {
-  const cvf = params.cvf ?? 1;
-  const unitPrice =
-    params.instrumentType === "FUT"
-      ? params.underlyingPrice
-      : (params.strike ?? params.underlyingPrice);
-  return Math.abs(params.quantity) * unitPrice * cvf;
+  return Math.abs(params.quantity) * params.underlyingPrice * (params.cvf ?? 1);
 }

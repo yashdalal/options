@@ -1,0 +1,18 @@
+ RUN  v4.1.10 /Users/yashdalal/options
+ ❯ tests/span-engine.test.ts (15 tests | 1 failed) 78ms
+     × charges exposure on spot × qty, not strike × qty, for short options 3ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/span-engine.test.ts > span parse + engine > charges exposure on spot × qty, not strike × qty, for short options
+AssertionError: expected 350.00000000000006 to be close to 437.5, received difference is 87.49999999999994, but expected 5e-7
+ ❯ tests/span-engine.test.ts:99:31
+     97|     );
+     98|
+     99|     expect(shortPut.exposure).toBeCloseTo(0.035 * 125 * 100, 6);
+       |                               ^
+    100|   });
+    101|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+   Start at  23:18:26
+   Duration  400ms (transform 109ms, setup 0ms, import 160ms, tests 78ms, environment 0ms)

@@ -157,9 +157,11 @@ function exposureFor(
       rate *
       notionalValue({
         quantity: row.quantity,
-        underlyingPrice: underlying.spot || row.contract.price,
-        strike: row.contract.strike,
-        instrumentType: row.contract.instrumentType,
+        underlyingPrice:
+          underlying.spot ||
+          (row.contract.instrumentType === "FUT"
+            ? row.contract.price
+            : (row.contract.strike ?? row.contract.price)),
         cvf: row.contract.cvf,
       });
   }
