@@ -208,6 +208,9 @@ function extractItems(payload: unknown): z.infer<typeof quoteItemSchema>[] {
   return parsed.data.message ?? parsed.data.data ?? [];
 }
 
+/** Kotak rejects quote requests with 50 symbols ("Please set the Neo symbol max value to 50"). */
+export const KOTAK_QUOTE_BATCH_SIZE = 40;
+
 function chunk<T>(items: T[], size: number): T[][] {
   const groups: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -360,7 +363,7 @@ function emptyQuote(item: InstrumentRef): InstrumentQuote {
 export async function fetchQuotes(
   session: TradeSessionCredentials,
   instruments: InstrumentRef[],
-  batchSize = 50,
+  batchSize = KOTAK_QUOTE_BATCH_SIZE,
 ): Promise<InstrumentQuote[]> {
   if (isDemoMode()) {
     return demoFetchQuotes(session, instruments, batchSize);
@@ -388,7 +391,7 @@ export async function fetchQuotes(
 export async function fetchSpotQuotes(
   session: TradeSessionCredentials,
   instruments: InstrumentRef[],
-  batchSize = 50,
+  batchSize = KOTAK_QUOTE_BATCH_SIZE,
 ): Promise<SpotQuote[]> {
   if (isDemoMode()) {
     return demoFetchSpotQuotes(session, instruments, batchSize);
