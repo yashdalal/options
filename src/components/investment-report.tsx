@@ -1117,7 +1117,7 @@ export function InvestmentReport({ onLoginRequired }: InvestmentReportProps) {
       </header>
 
       {helpOpen ? (
-        <div className="fixed inset-0 z-40 flex justify-end">
+        <div className="fixed inset-0 z-[60] flex justify-end">
           <button
             type="button"
             aria-label="Close help panel"
