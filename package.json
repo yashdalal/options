@@ -16,7 +16,8 @@
     "probe:kotak": "tsx scripts/probe-kotak.ts",
     "probe:session-store": "tsx scripts/probe-session-store.ts",
     "probe:span": "tsx scripts/probe-span-margin.ts",
-    "diagnostics:dump": "tsx scripts/dump-diagnostics.ts"
+    "diagnostics:dump": "tsx scripts/dump-diagnostics.ts",
+    "margin:calibration": "tsx scripts/margin-calibration.ts"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.0",
