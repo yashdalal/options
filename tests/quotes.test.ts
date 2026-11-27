@@ -16,7 +16,7 @@ vi.mock("@/server/kotak/rate-limit", () => ({
   }),
 }));
 
-import { fetchQuotes, resolveLtp } from "@/server/kotak/quotes";
+import { fetchQuotes, KOTAK_QUOTE_BATCH_SIZE, resolveLtp } from "@/server/kotak/quotes";
 
 const session: TradeSessionCredentials = {
   accessToken: "access",
@@ -154,6 +154,30 @@ describe("fetchQuotes", () => {
       message: "Unexpected quote response shape",
       code: "invalid_response",
     });
+  });
+
+  it("keeps every quote request under Kotak's 50-symbol limit", async () => {
+    kotakFetch.mockImplementation(async (url: string) => {
+      const symbols = decodeURIComponent(url.split("/neosymbol/")[1]).split(",");
+      return symbols.map((symbol) => ({
+        instrument_token: symbol.split("|")[1],
+        exchange_segment: "nse_fo",
+        ltp: 1,
+      }));
+    });
+    const instruments = Array.from({ length: 85 }, (_, index) => ({
+      instrumentToken: String(1000 + index),
+      exchangeSegment: "nse_fo",
+    }));
+
+    const quotes = await fetchQuotes(session, instruments);
+
+    const requestSizes = kotakFetch.mock.calls.map(
+      ([url]) => decodeURIComponent(String(url).split("/neosymbol/")[1]).split(",").length,
+    );
+    expect(requestSizes).toEqual([KOTAK_QUOTE_BATCH_SIZE, KOTAK_QUOTE_BATCH_SIZE, 5]);
+    expect(Math.max(...requestSizes)).toBeLessThan(50);
+    expect(quotes).toHaveLength(85);
   });
 
   it("throws when a successful response contains no quote rows", async () => {

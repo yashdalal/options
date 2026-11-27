@@ -1,0 +1,7 @@
+2026-11-27T02:41:09.522Z Unable to load screener snapshot {   "requestId": "[REDACTED]",   "message": "Kotak request failed with status 400",   "name": "KotakApiError",   "code": "bad_request",   "status": 400 }
+2026-11-27T02:41:09.522Z Kotak request failed {   "url": "https://mis.kotaksecurities.com/script-details/1.0/quotes/neosymbol/<50 symbols>",   "status": 400,   "payload": {     "fault": {       "code": "400",       "description": "Please set the Neo symbol max value to 50.",       "message": "Please set the Neo symbol max value to 50."     }   } }
+2026-11-27T02:41:09.074Z Building screen snapshot {   "requestId": "[REDACTED]",   "symbol": "NIFTY",   "expiryIso": "2026-12-01" }
+2026-11-27T02:40:45.657Z Building screen snapshot {   "requestId": "[REDACTED]",   "symbol": "MARUTI",   "expiryIso": "2026-12-29" }
+2026-11-27T02:40:13.291Z Unable to load screener snapshot {   "requestId": "[REDACTED]",   "message": "Kotak request failed with status 400",   "name": "KotakApiError",   "code": "bad_request",   "status": 400 }
+2026-11-27T02:40:13.290Z Kotak request failed {   "url": "https://mis.kotaksecurities.com/script-details/1.0/quotes/neosymbol/<50 symbols>",   "status": 400,   "payload": {     "fault": {       "code": "400",       "description": "Please set the Neo symbol max value to 50.",       "message": "Please set the Neo symbol max value to 50."     }   } }
+2026-11-27T02:40:09.916Z Building screen snapshot {   "requestId": "[REDACTED]",   "symbol": "IDFCFIRSTB",   "expiryIso": "2026-12-29" }
