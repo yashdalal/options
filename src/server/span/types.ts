@@ -26,12 +26,18 @@ export type SpanCalendarSpread = {
   legs: SpanSpreadLeg[];
 };
 
+export type ElmRates = {
+  normalPercent: number;
+  deepOutOfMoneyPercent: number;
+};
+
 export type SpanUnderlying = {
   symbol: string;
   spot: number;
   somRate: number;
   contracts: SpanContract[];
   spreads: SpanCalendarSpread[];
+  elm?: ElmRates;
 };
 
 export type SpanSnapshotMeta = {
@@ -41,7 +47,7 @@ export type SpanSnapshotMeta = {
   fetchedAt: string;
   underlyingCount: number;
   underlyings: string[];
-  exposureSource: "nse_default_rates";
+  exposureSource: string;
 };
 
 export type SpanPosition = {
